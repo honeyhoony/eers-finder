@@ -1,0 +1,100 @@
+name: 🤖 EERS 데이터 자동 수집 (Daily)
+
+on:
+  schedule:
+    # 매일 한국시간 오전 6시 (UTC 21:00 전날) 자동 실행
+    - cron: '0 21 * * *'
+  workflow_dispatch:
+    # 수동 실행도 가능 (GitHub Actions 탭에서 "Run workflow" 버튼)
+    inputs:
+      target_date:
+        description: '수집 날짜 (YYYYMMDD, 비워두면 오늘)'
+        required: false
+        default: ''
+
+jobs:
+  collect:
+    name: 공고 데이터 수집 → Supabase 저장
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 코드 체크아웃
+        uses: actions/checkout@v4
+
+      - name: 🐍 Python 3.11 설정
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: 📦 의존성 설치
+        working-directory: ./eers_mobile   # 파이썬 프로젝트 폴더
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: 🗄️ Supabase 연결 설정 (config.py 생성)
+        working-directory: ./eers_mobile
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          NARA_SERVICE_KEY: ${{ secrets.NARA_SERVICE_KEY }}
+          KAPT_SERVICE_KEY: ${{ secrets.KAPT_SERVICE_KEY }}
+        run: |
+          cat > config_secrets.py << EOF
+          SUPABASE_DB_URL = "${SUPABASE_DB_URL}"
+          NARA_SERVICE_KEY = "${NARA_SERVICE_KEY}"
+          KAPT_SERVICE_KEY = "${KAPT_SERVICE_KEY}"
+          EOF
+
+      - name: 🚀 데이터 수집 실행
+        working-directory: ./eers_mobile
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          NARA_SERVICE_KEY: ${{ secrets.NARA_SERVICE_KEY }}
+          KAPT_SERVICE_KEY: ${{ secrets.KAPT_SERVICE_KEY }}
+          TARGET_DATE: ${{ github.event.inputs.target_date }}
+        run: |
+          python - << 'PYEOF'
+          import os
+          import sys
+          from datetime import datetime
+
+          # 환경변수로 config 덮어쓰기
+          import config
+          config.SUPABASE_DB_URL = os.environ.get("SUPABASE_DB_URL", config.SUPABASE_DB_URL)
+          config.NARA_SERVICE_KEY = os.environ.get("NARA_SERVICE_KEY", config.NARA_SERVICE_KEY)
+          config.KAPT_SERVICE_KEY = os.environ.get("KAPT_SERVICE_KEY", config.KAPT_SERVICE_KEY)
+
+          from collect_data import (
+              fetch_and_process_bid_notices,
+              fetch_and_process_contracts,
+              fetch_and_process_delivery_requests,
+              fetch_and_process_kapt_bids,
+              fetch_and_process_kapt_bid_results,
+          )
+
+          target = os.environ.get("TARGET_DATE", "").strip()
+          search_date = target if target else datetime.now().strftime("%Y%m%d")
+
+          print(f"=== EERS 데이터 수집 시작: {search_date} ===")
+
+          print("--- G2B: 입찰공고 ---")
+          fetch_and_process_bid_notices(search_date)
+
+          print("--- G2B: 계약완료 ---")
+          fetch_and_process_contracts(search_date)
+
+          print("--- G2B: 납품요구 ---")
+          fetch_and_process_delivery_requests(search_date)
+
+          print("--- K-APT: 입찰공고 ---")
+          fetch_and_process_kapt_bids(search_date)
+
+          print("--- K-APT: 입찰결과 ---")
+          fetch_and_process_kapt_bid_results(search_date)
+
+          print("=== 수집 완료! ===")
+          PYEOF
+
+      - name: ✅ 완료 알림
+        run: echo "✅ ${{ github.run_id }} — 데이터 수집 완료 $(date '+%Y-%m-%d %H:%M KST')"
