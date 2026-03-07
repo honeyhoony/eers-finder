@@ -1,8 +1,28 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 
-const GEMINI_KEY = process.env.GEMINI_API_KEY;
-const OPENAI_KEY = process.env.OPENAI_API_KEY;
+// ── Supabase app_settings 에서 키 읽기 (Vercel 환경변수 미설정 시 대비) ──
+async function getApiKeys(): Promise<{ gemini: string; openai: string }> {
+  const fromEnv = {
+    gemini: process.env.GEMINI_API_KEY || "",
+    openai:  process.env.OPENAI_API_KEY  || "",
+  };
+  if (fromEnv.gemini && fromEnv.openai) return fromEnv;
+
+  // 환경변수 없으면 Supabase app_settings 테이블에서 읽기
+  try {
+    const supabase = await createClient();
+    const { data } = await supabase.from("app_settings").select("key,value");
+    if (data) {
+      const map = Object.fromEntries(data.map((r: { key: string; value: string }) => [r.key, r.value]));
+      return {
+        gemini: fromEnv.gemini || map["GEMINI_API_KEY"] || "",
+        openai:  fromEnv.openai  || map["OPENAI_API_KEY"]  || "",
+      };
+    }
+  } catch { /* app_settings 없으면 무시 */ }
+  return fromEnv;
+}
 
 type AIResult = { score: number; reason: string; tips: string };
 
@@ -19,9 +39,9 @@ function extractJSON(text: string): Record<string, unknown> {
   return JSON.parse(text);
 }
 
-async function callGemini(prompt: string): Promise<AIResult> {
+async function callGemini(prompt: string, key: string): Promise<AIResult> {
   const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -46,12 +66,12 @@ async function callGemini(prompt: string): Promise<AIResult> {
   };
 }
 
-async function callOpenAI(prompt: string): Promise<AIResult> {
+async function callOpenAI(prompt: string, key: string): Promise<AIResult> {
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${OPENAI_KEY}`,
+      "Authorization": `Bearer ${key}`,
     },
     body: JSON.stringify({
       model: "gpt-4o-mini",
@@ -116,8 +136,12 @@ export async function POST(request: NextRequest) {
     const { data: notice, error: ne } = await supabase.from("notices").select("*").eq("id", noticeId).single();
     if (ne || !notice) return NextResponse.json({ error: `공고 없음: ${ne?.message}` }, { status: 404 });
 
-    if (!GEMINI_KEY && !OPENAI_KEY) {
-      return NextResponse.json({ error: "AI API 키가 설정되지 않았습니다 (GEMINI_API_KEY 또는 OPENAI_API_KEY)" }, { status: 500 });
+    // 환경변수 → Supabase app_settings 순서로 키 조회
+    const keys = await getApiKeys();
+    if (!keys.gemini && !keys.openai) {
+      return NextResponse.json({
+        error: "AI API 키가 설정되지 않았습니다. 관리자 콘솔 → ⚙️ API 설정에서 Gemini 키를 등록하세요.",
+      }, { status: 500 });
     }
 
     const prompt = buildPrompt(notice as Record<string, unknown>);
@@ -126,9 +150,9 @@ export async function POST(request: NextRequest) {
     const errors: string[] = [];
 
     // ① Gemini 우선
-    if (GEMINI_KEY) {
+    if (keys.gemini) {
       try {
-        result = await callGemini(prompt);
+        result = await callGemini(prompt, keys.gemini);
         usedProvider = "Gemini 2.0 Flash";
       } catch (e) {
         errors.push(`Gemini: ${e}`);
@@ -137,9 +161,9 @@ export async function POST(request: NextRequest) {
     }
 
     // ② OpenAI 폴백
-    if (!result && OPENAI_KEY) {
+    if (!result && keys.openai) {
       try {
-        result = await callOpenAI(prompt);
+        result = await callOpenAI(prompt, keys.openai);
         usedProvider = "OpenAI GPT-4o-mini";
       } catch (e) {
         errors.push(`OpenAI: ${e}`);

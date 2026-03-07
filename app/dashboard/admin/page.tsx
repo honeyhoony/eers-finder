@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { Users, Shield, Bell, ArrowLeft, Search, CheckCircle } from "lucide-react";
+import { Users, Shield, Bell, ArrowLeft, Search, CheckCircle, Key, Database } from "lucide-react";
 import Link from "next/link";
 
 type UserProfile = {
@@ -24,13 +24,18 @@ const STATUS_COLORS: Record<string, string> = {
 export default function AdminPage() {
   const router = useRouter();
   const supabase = createClient();
-  const [tab, setTab] = useState<"users" | "notif">("users");
+  const [tab, setTab] = useState<"users" | "notif" | "api" | "db">("users");
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [notifs, setNotifs] = useState<NotifSetting[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [myRole, setMyRole] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
+
+  // AI API 설정
+  const [geminiKey, setGeminiKey] = useState("");
+  const [openaiKey, setOpenaiKey] = useState("");
+  const [savingApi, setSavingApi] = useState(false);
 
   // 알림 설정 폼
   const [notifType, setNotifType] = useState("email");
@@ -56,10 +61,35 @@ export default function AdminPage() {
       const { data: n } = await supabase.from("notification_settings").select("*").order("id", { ascending: false });
       if (n) setNotifs(n as NotifSetting[]);
 
+      // AI API 키 로드
+      try {
+        const { data: settings } = await supabase.from("app_settings").select("key,value");
+        if (settings) {
+          const m = Object.fromEntries(settings.map((s: {key:string;value:string}) => [s.key, s.value]));
+          if (m["GEMINI_API_KEY"]) setGeminiKey(m["GEMINI_API_KEY"]);
+          if (m["OPENAI_API_KEY"])  setOpenaiKey(m["OPENAI_API_KEY"]);
+        }
+      } catch { /* app_settings 없으면 무시 */ }
+
       setLoading(false);
     };
     load();
   }, [supabase, router]);
+
+  // AI API 키 저장
+  const saveApiKey = async (keyName: string, value: string) => {
+    if (!value.trim()) return;
+    setSavingApi(true);
+    try {
+      await supabase.from("app_settings").upsert({ key: keyName, value: value.trim(), updated_at: new Date().toISOString() }, { onConflict: "key" });
+      setMsg(`✅ ${keyName} 저장 완료!`);
+    } catch {
+      setMsg(`❌ app_settings 테이블이 없습니다. DB 설정 탭을 먼저 실행하세요.`);
+    } finally {
+      setSavingApi(false);
+      setTimeout(() => setMsg(null), 4000);
+    }
+  };
 
   const setRole = async (userId: string, role: string) => {
     if (myRole !== "S") { setMsg("❌ 최고관리자(S)만 등급을 변경할 수 있습니다."); return; }
@@ -121,12 +151,14 @@ export default function AdminPage() {
       </div>
 
       {/* 탭 */}
-      <div style={{ display: "flex", gap: "0.5rem", marginBottom: "1.5rem" }}>
+      <div style={{ display: "flex", gap: "0.5rem", marginBottom: "1.5rem", flexWrap: "wrap" }}>
         {[
-          { key: "users", label: `👥 사용자 관리 (${users.length}명)` },
+          { key: "users", label: `👥 사용자 (${users.length}명)` },
           { key: "notif", label: "🔔 알림 설정" },
+          { key: "api",   label: "⚙️ AI 키 설정" },
+          { key: "db",    label: "🛢️ DB 초기화 SQL" },
         ].map(t => (
-          <button key={t.key} onClick={() => setTab(t.key as "users" | "notif")}
+          <button key={t.key} onClick={() => setTab(t.key as "users" | "notif" | "api" | "db")}
             style={{ padding: "0.6rem 1.2rem", borderRadius: "10px", fontSize: "0.9rem", fontWeight: tab === t.key ? "700" : "400",
               background: tab === t.key ? "rgba(16,185,129,0.15)" : "rgba(255,255,255,0.05)",
               border: tab === t.key ? "1px solid rgba(16,185,129,0.4)" : "1px solid var(--surface-border)",
@@ -286,7 +318,168 @@ export default function AdminPage() {
             </div>
           )}
         </motion.div>
+      {/* ── AI API 키 설정 탭 ── */}
+      {tab === "api" && (
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+          <div className="glass-panel" style={{ padding: "2rem", marginBottom: "1.5rem", borderColor: "rgba(251,191,36,0.3)" }}>
+            <h3 style={{ fontSize: "1.1rem", fontWeight: "700", marginBottom: "0.5rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+              <Key size={20} color="#fbbf24" /> AI API 키 설정 (Supabase 저장)
+            </h3>
+            <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginBottom: "1.5rem", lineHeight: 1.6 }}>
+              Vercel 환경변수가 없어도 여기서 저장하면 AI 분석이 작동합니다.<br/>
+              키는 Supabase <code style={{ background: "rgba(255,255,255,0.1)", padding: "0.1rem 0.3rem", borderRadius: "3px" }}>app_settings</code> 테이블에 저장됩니다.
+            </p>
+
+            {/* Gemini */}
+            <div style={{ marginBottom: "1.25rem" }}>
+              <label style={{ fontSize: "0.8rem", color: "#fbbf24", fontWeight: 700, display: "block", marginBottom: "0.4rem" }}>
+                🤖 Gemini API Key (우선 사용)
+              </label>
+              <div style={{ display: "flex", gap: "0.5rem" }}>
+                <input type="password" value={geminiKey} onChange={e => setGeminiKey(e.target.value)}
+                  placeholder="AIzaSy..."
+                  style={{ flex: 1, padding: "0.65rem 0.8rem", borderRadius: "8px", background: "rgba(0,0,0,0.3)", border: "1px solid rgba(251,191,36,0.3)", color: "white", fontSize: "0.875rem", fontFamily: "monospace" }} />
+                <button onClick={() => saveApiKey("GEMINI_API_KEY", geminiKey)} disabled={savingApi || !geminiKey}
+                  className="btn-primary" style={{ padding: "0.65rem 1rem", fontSize: "0.85rem", borderRadius: "8px", whiteSpace: "nowrap" }}>
+                  💾 저장
+                </button>
+              </div>
+            </div>
+
+            {/* OpenAI */}
+            <div style={{ marginBottom: "1rem" }}>
+              <label style={{ fontSize: "0.8rem", color: "#60a5fa", fontWeight: 700, display: "block", marginBottom: "0.4rem" }}>
+                🧠 OpenAI API Key (Gemini 실패 시 자동 전환)
+              </label>
+              <div style={{ display: "flex", gap: "0.5rem" }}>
+                <input type="password" value={openaiKey} onChange={e => setOpenaiKey(e.target.value)}
+                  placeholder="sk-proj-..."
+                  style={{ flex: 1, padding: "0.65rem 0.8rem", borderRadius: "8px", background: "rgba(0,0,0,0.3)", border: "1px solid rgba(96,165,250,0.3)", color: "white", fontSize: "0.875rem", fontFamily: "monospace" }} />
+                <button onClick={() => saveApiKey("OPENAI_API_KEY", openaiKey)} disabled={savingApi || !openaiKey}
+                  className="btn-primary" style={{ padding: "0.65rem 1rem", fontSize: "0.85rem", borderRadius: "8px", whiteSpace: "nowrap" }}>
+                  💾 저장
+                </button>
+              </div>
+            </div>
+
+            <div style={{ padding: "0.75rem 1rem", borderRadius: "8px", background: "rgba(16,185,129,0.08)", border: "1px solid rgba(16,185,129,0.2)", fontSize: "0.82rem", color: "var(--text-secondary)" }}>
+              💡 현재 설정된 키: {geminiKey ? `Gemini ✅ (${geminiKey.slice(0,8)}...)` : "Gemini ❌"} &nbsp;|&nbsp; {openaiKey ? `OpenAI ✅ (${openaiKey.slice(0,8)}...)` : "OpenAI ❌"}
+            </div>
+          </div>
+        </motion.div>
+      )}
+
+      {/* ── DB 초기화 SQL 탭 ── */}
+      {tab === "db" && (
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+          <div className="glass-panel" style={{ padding: "2rem", borderColor: "rgba(96,165,250,0.3)" }}>
+            <h3 style={{ fontSize: "1.1rem", fontWeight: "700", marginBottom: "0.5rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+              <Database size={20} color="#60a5fa" /> DB 초기화 SQL
+            </h3>
+            <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginBottom: "1.25rem", lineHeight: 1.6 }}>
+              아래 SQL을 <strong style={{ color: "white" }}>Supabase 대시보드 → SQL Editor</strong>에 붙여넣고 실행하세요.<br/>
+              ① <a href="https://supabase.com/dashboard" target="_blank" style={{ color: "#60a5fa" }}>supabase.com/dashboard</a> 접속
+              → ② 프로젝트 선택 → ③ 왼쪽 SQL Editor → ④ 아래 SQL 전체 복사+붙여넣기 → ⑤ Run
+            </p>
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(MIGRATION_SQL);
+                setMsg("✅ SQL이 클립보드에 복사되었습니다!");
+                setTimeout(() => setMsg(null), 3000);
+              }}
+              className="btn-primary"
+              style={{ marginBottom: "1rem", padding: "0.6rem 1.2rem", fontSize: "0.875rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+              📋 전체 SQL 복사
+            </button>
+            <pre style={{ background: "rgba(0,0,0,0.4)", borderRadius: "8px", padding: "1rem", fontSize: "0.78rem", overflowX: "auto", lineHeight: 1.6, color: "#86efac", border: "1px solid rgba(134,239,172,0.2)", maxHeight: "500px", overflowY: "auto", whiteSpace: "pre" }}>
+              {MIGRATION_SQL}
+            </pre>
+          </div>
+        </motion.div>
       )}
     </div>
   );
 }
+
+const MIGRATION_SQL = `-- EERS AI Finder DB 초기화 SQL (Supabase SQL Editor에서 실행)
+-- app_settings 테이블 (AI API 키 저장)
+CREATE TABLE IF NOT EXISTS public.app_settings (
+  key        text PRIMARY KEY,
+  value      text NOT NULL,
+  updated_at timestamptz DEFAULT now()
+);
+ALTER TABLE public.app_settings ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "S admin only app_settings" ON public.app_settings
+  FOR ALL USING ((SELECT role FROM public.profiles WHERE id = auth.uid()) = 'S');
+
+-- profiles 컬럼 추가
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS phone text;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS hq text;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS office text;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS role text DEFAULT 'B';
+
+-- 최고관리자 설정
+UPDATE public.profiles SET role = 'S', is_admin = true
+  WHERE email = 'jeon.bh@kepco.co.kr';
+
+-- notices 컬럼 추가
+ALTER TABLE public.notices ADD COLUMN IF NOT EXISTS stage text;
+ALTER TABLE public.notices ADD COLUMN IF NOT EXISTS client text;
+ALTER TABLE public.notices ADD COLUMN IF NOT EXISTS phone_number text;
+ALTER TABLE public.notices ADD COLUMN IF NOT EXISTS model_name text DEFAULT 'N/A';
+ALTER TABLE public.notices ADD COLUMN IF NOT EXISTS quantity integer;
+ALTER TABLE public.notices ADD COLUMN IF NOT EXISTS is_certified text;
+ALTER TABLE public.notices ADD COLUMN IF NOT EXISTS is_favorite boolean DEFAULT false;
+ALTER TABLE public.notices ADD COLUMN IF NOT EXISTS status text DEFAULT '';
+ALTER TABLE public.notices ADD COLUMN IF NOT EXISTS memo text DEFAULT '';
+ALTER TABLE public.notices ADD COLUMN IF NOT EXISTS ai_call_tips text DEFAULT '';
+ALTER TABLE public.notices ADD COLUMN IF NOT EXISTS assigned_hq text DEFAULT '본부확인요망';
+ALTER TABLE public.notices ADD COLUMN IF NOT EXISTS source_system text DEFAULT 'G2B';
+ALTER TABLE public.notices ADD COLUMN IF NOT EXISTS ai_suitability_score integer;
+ALTER TABLE public.notices ADD COLUMN IF NOT EXISTS ai_suitability_reason text;
+
+-- user_favorites 테이블
+CREATE TABLE IF NOT EXISTS public.user_favorites (
+  id           serial PRIMARY KEY,
+  user_id      uuid REFERENCES auth.users ON DELETE CASCADE NOT NULL,
+  notice_id    integer NOT NULL,
+  status       text DEFAULT '미접촉',
+  memo         text DEFAULT '',
+  contact_date text,
+  last_action  text,
+  created_at   timestamptz DEFAULT now(),
+  updated_at   timestamptz DEFAULT now(),
+  UNIQUE(user_id, notice_id)
+);
+ALTER TABLE public.user_favorites ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users manage own favorites" ON public.user_favorites
+  FOR ALL USING (auth.uid() = user_id);
+
+-- notices RLS
+ALTER TABLE public.notices ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Authenticated can read notices" ON public.notices;
+CREATE POLICY "Authenticated can read notices" ON public.notices
+  FOR SELECT USING (auth.role() = 'authenticated');
+DROP POLICY IF EXISTS "Authenticated can update notices" ON public.notices;
+CREATE POLICY "Authenticated can update notices" ON public.notices
+  FOR UPDATE USING (auth.role() = 'authenticated');
+
+-- 자동 프로필 생성 트리거
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS trigger AS $$
+BEGIN
+  INSERT INTO public.profiles (id, email, name, role, is_admin)
+  VALUES (
+    NEW.id, NEW.email,
+    COALESCE(NEW.raw_user_meta_data->>'name', split_part(NEW.email, '@', 1)),
+    CASE WHEN NEW.email = 'jeon.bh@kepco.co.kr' THEN 'S' ELSE 'B' END,
+    CASE WHEN NEW.email = 'jeon.bh@kepco.co.kr' THEN true ELSE false END
+  )
+  ON CONFLICT (id) DO NOTHING;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
+`;
