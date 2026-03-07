@@ -1,14 +1,61 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { motion } from "framer-motion";
-import { Search, Loader2, FileText, CheckCircle, Database, ArrowRight, Calendar } from "lucide-react";
+import { Search, Loader2, FileText, CheckCircle, Database, ArrowRight, Calendar, X } from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
 import Link from "next/link";
 
 // 날짜 유틸 — Supabase notice_date 는 "2026-03-07" ISO 형식으로 저장됨
-const fmt = (d: Date) => d.toISOString().slice(0, 10);           // "2026-03-07"
-const toDisplay = (iso: string) => iso ? iso.replace(/-/g, ".") : ""; // "2026.03.07"
+const fmt = (d: Date) => d.toISOString().slice(0, 10);
+const toDisplay = (iso: string) => iso ? iso.replace(/-/g, ".") : "";
+
+// ── EERS 품목 매핑 (gui_app.py 기준) ──
+const EERS_CATEGORY: Record<string, { label: string; emoji: string; color: string; bg: string }> = {
+  "LED":       { label: "고효율 LED 조명",      emoji: "💡", color: "#fbbf24", bg: "rgba(251,191,36,0.15)" },
+  "조명":      { label: "고효율 LED 조명",      emoji: "💡", color: "#fbbf24", bg: "rgba(251,191,36,0.15)" },
+  "인버터":    { label: "고효율 인버터",         emoji: "⚙️", color: "#60a5fa", bg: "rgba(96,165,250,0.15)" },
+  "변압기":    { label: "고효율 변압기",         emoji: "🔋", color: "#34d399", bg: "rgba(52,211,153,0.15)" },
+  "펌프":      { label: "고효율 펌프",           emoji: "💧", color: "#38bdf8", bg: "rgba(56,189,248,0.15)" },
+  "히트펌프":  { label: "히트펌프",             emoji: "♨️", color: "#f87171", bg: "rgba(248,113,113,0.15)" },
+  "냉동기":    { label: "고효율 냉동기",         emoji: "❄️", color: "#93c5fd", bg: "rgba(147,197,253,0.15)" },
+  "공기압축기":{ label: "인버터제어형 공기압축기",emoji: "💨", color: "#a78bfa", bg: "rgba(167,139,250,0.15)" },
+  "압축기":    { label: "공기압축기",            emoji: "💨", color: "#a78bfa", bg: "rgba(167,139,250,0.15)" },
+  "전동기":    { label: "프리미엄 전동기",        emoji: "⚡", color: "#fb923c", bg: "rgba(251,146,60,0.15)" },
+  "모터":      { label: "프리미엄 전동기(모터)",  emoji: "⚡", color: "#fb923c", bg: "rgba(251,146,60,0.15)" },
+  "승강기":    { label: "회생제동장치(승강기)",   emoji: "🏢", color: "#e879f9", bg: "rgba(232,121,249,0.15)" },
+  "사출성형기":{ label: "전동식 사출성형기",      emoji: "🏭", color: "#94a3b8", bg: "rgba(148,163,184,0.15)" },
+  "터보압축기":{ label: "고효율 터보압축기",      emoji: "🌀", color: "#2dd4bf", bg: "rgba(45,212,191,0.15)" },
+  "송풍기":    { label: "원심식 송풍기",         emoji: "🌬️", color: "#86efac", bg: "rgba(134,239,172,0.15)" },
+  "항온항습기":{ label: "고효율 항온항습기",      emoji: "🌡️", color: "#c084fc", bg: "rgba(192,132,252,0.15)" },
+};
+
+const QUICK_KEYWORDS = [
+  "LED", "인버터", "변압기", "펌프", "히트펌프", "냉동기", "공기압축기", "전동기", "승강기", "조명"
+];
+
+function getEersCategory(biz_type: string | null) {
+  if (!biz_type) return null;
+  const t = biz_type.trim();
+  return EERS_CATEGORY[t] || Object.entries(EERS_CATEGORY).find(([k]) => t.includes(k))?.[1] || null;
+}
+
+// 키워드 검색 파서 (AND: &, OR: space, exclude: -)
+function matchesSearch(text: string, query: string): boolean {
+  if (!query.trim()) return true;
+  const lower = text.toLowerCase();
+  // AND 조건 (& 구분)
+  if (query.includes("&")) {
+    return query.split("&").every(term => lower.includes(term.trim().toLowerCase()));
+  }
+  // 단어 분리 (OR), 앞에 - 붙으면 제외
+  const terms = query.trim().split(/\s+/);
+  const includes = terms.filter(t => !t.startsWith("-"));
+  const excludes = terms.filter(t => t.startsWith("-")).map(t => t.slice(1));
+  if (excludes.some(e => lower.includes(e.toLowerCase()))) return false;
+  if (includes.length === 0) return true;
+  return includes.some(t => lower.includes(t.toLowerCase()));
+}
 
 type DatePreset = "오늘" | "이번주" | "이번달" | "직접선택";
 
@@ -81,7 +128,6 @@ export default function Dashboard() {
   const [datePreset, setDatePreset] = useState<DatePreset>("이번달");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo]   = useState("");
-  // 날짜 범위 (서버/클라이언트 hydration 불일치 방지 위해 초기값 빈 문자열)
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo]     = useState("");
   const [mounted, setMounted]   = useState(false);
@@ -95,10 +141,21 @@ export default function Dashboard() {
   const [adminList, setAdminList] = useState<{email: string; name: string | null}[]>([]);
   const [adminMsg, setAdminMsg] = useState<string | null>(null);
   const [favMap, setFavMap] = useState<Record<number, boolean>>({});
+  const [searchText, setSearchText] = useState("");
   const supabase = createClient();
   const [userId, setUserId] = useState<string | null>(null);
 
   const officeList = selectedHq === "전국" ? [] : HQ_OFFICE_MAP[selectedHq] || [];
+
+  // 클라이언트 사이드 검색 필터
+  const filteredNotices = useMemo(() => {
+    if (!searchText.trim()) return notices;
+    return notices.filter(n => {
+      const searchable = [n.project_name, n.client, n.biz_type, n.model_name, n.address]
+        .filter(Boolean).join(" ");
+      return matchesSearch(searchable, searchText);
+    });
+  }, [notices, searchText]);
 
   // 클라이언트 마운트 후에만 날짜 계산 (Hydration 에러 방지)
   useEffect(() => {
@@ -182,14 +239,16 @@ export default function Dashboard() {
         if (d2?.is_admin) setIsAdmin(true);
       }
 
-      // 관심 공고 맵 로드 (user_favorites 테이블)
-      const { data: favs } = await supabase
-        .from("user_favorites").select("notice_id").eq("user_id", user.id);
-      if (favs) {
-        const m: Record<number, boolean> = {};
-        favs.forEach((f: { notice_id: number }) => { m[f.notice_id] = true; });
-        setFavMap(m);
-      }
+      // 관심 공고 맵 로드 (user_favorites 테이블, 테이블 없으면 무시)
+      try {
+        const { data: favs } = await supabase
+          .from("user_favorites").select("notice_id").eq("user_id", user.id);
+        if (favs) {
+          const m: Record<number, boolean> = {};
+          favs.forEach((f: { notice_id: number }) => { m[f.notice_id] = true; });
+          setFavMap(m);
+        }
+      } catch { /* 테이블 없으면 무시 */ }
     };
     checkAdmin();
   }, [supabase]);
@@ -252,16 +311,21 @@ export default function Dashboard() {
     fetchAnnouncements();
   }, [fetchAnnouncements]);
 
-  // 관심 고객 토글 (user_favorites 테이블)
+  // 관심 고객 토글 (user_favorites 테이블, notices.is_favorite 동시 업데이트)
   const handleToggleFav = async (noticeId: number) => {
-    if (!userId) return;
     const isFav = !!favMap[noticeId];
     setFavMap(prev => ({ ...prev, [noticeId]: !isFav }));
-    if (isFav) {
-      await supabase.from("user_favorites").delete().eq("user_id", userId).eq("notice_id", noticeId);
-    } else {
-      await supabase.from("user_favorites").insert({ user_id: userId, notice_id: noticeId, status: "미접촉" });
+    if (userId) {
+      try {
+        if (isFav) {
+          await supabase.from("user_favorites").delete().eq("user_id", userId).eq("notice_id", noticeId);
+        } else {
+          await supabase.from("user_favorites").upsert({ user_id: userId, notice_id: noticeId, status: "미접촉" }, { onConflict: "user_id,notice_id" });
+        }
+      } catch { /* user_favorites 테이블 없으면 무시 */ }
     }
+    // notices 테이블 is_favorite도 업데이트
+    await supabase.from("notices").update({ is_favorite: !isFav }).eq("id", noticeId);
   };
 
   return (
@@ -449,6 +513,48 @@ export default function Dashboard() {
         </div>
       )}
 
+      {/* ── 검색바 + 간편 키워드 버튼 ── */}
+      <div style={{ marginBottom: "1rem", padding: "1rem 1.25rem", borderRadius: "12px", background: "rgba(255,255,255,0.04)", border: "1px solid var(--surface-border)" }}>
+        <label style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 600, display: "block", marginBottom: "0.5rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+          <Search size={12} style={{ display: "inline", marginRight: "4px" }} /> 키워드 검색
+        </label>
+        {/* 텍스트 검색창 */}
+        <div style={{ position: "relative", marginBottom: "0.65rem" }}>
+          <Search size={15} style={{ position: "absolute", left: "0.9rem", top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)", pointerEvents: "none" }} />
+          <input
+            value={searchText}
+            onChange={e => setSearchText(e.target.value)}
+            placeholder="공고명·기관명·품목 검색 (AND: &, 제외: -, 예: led & 교체)"
+            style={{ width: "100%", padding: "0.55rem 2.5rem 0.55rem 2.4rem", borderRadius: "8px", background: "rgba(0,0,0,0.25)", border: "1px solid var(--surface-border)", color: "white", fontSize: "0.875rem", boxSizing: "border-box" }}
+          />
+          {searchText && (
+            <button onClick={() => setSearchText("")}
+              style={{ position: "absolute", right: "0.7rem", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)" }}>
+              <X size={14} />
+            </button>
+          )}
+        </div>
+        {/* 간편 키워드 버튼 */}
+        <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
+          <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", alignSelf: "center", marginRight: "0.15rem" }}>EERS 품목:</span>
+          {QUICK_KEYWORDS.map(kw => {
+            const cat = EERS_CATEGORY[kw];
+            const active = searchText.toLowerCase() === kw.toLowerCase();
+            return (
+              <button key={kw}
+                onClick={() => setSearchText(active ? "" : kw)}
+                style={{ padding: "0.25rem 0.7rem", borderRadius: "999px", fontSize: "0.8rem", cursor: "pointer", transition: "all 0.15s",
+                  background: active ? cat?.bg : "rgba(255,255,255,0.05)",
+                  color: active ? cat?.color : "var(--text-muted)",
+                  border: active ? `1px solid ${cat?.color}` : "1px solid var(--surface-border)",
+                  fontWeight: active ? "700" : "400" }}>
+                {cat?.emoji} {kw}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       {/* ── 날짜 필터 바 ── */}
       <div style={{ marginBottom: "1rem", padding: "1rem 1.25rem", borderRadius: "12px", background: "rgba(255,255,255,0.03)", border: "1px solid var(--surface-border)" }}>
         <label style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 600, display: "block", marginBottom: "0.5rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>
@@ -567,17 +673,19 @@ export default function Dashboard() {
         </div>
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "1rem" }}>
-          <p style={{ fontSize: "0.875rem", color: "var(--text-muted)", marginBottom: "0.25rem" }}>
-            총 <strong style={{ color: "var(--text-primary)" }}>{notices.length}건</strong>의 공고문
+        <p style={{ fontSize: "0.875rem", color: "var(--text-muted)", marginBottom: "0.25rem" }}>
+            총 <strong style={{ color: "var(--text-primary)" }}>{filteredNotices.length}건</strong>
+            {notices.length !== filteredNotices.length && <span style={{ color: "var(--brand-primary)" }}> (전체 {notices.length}건 중)</span>}
             {selectedHq !== "전국" && ` — ${selectedHq}`}
-            {selectedOffice !== "전체" && ` > ${selectedOffice}`}
+            {selectedOffice !== "전체" && ` › ${selectedOffice}`}
+            {searchText && <span style={{ color: "#fbbf24" }}> 🔍 "{searchText}"</span>}
           </p>
-          {notices.map((item, index) => (
+          {filteredNotices.map((item, index) => (
             <motion.div
               key={item.id}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.04 }}
+              transition={{ delay: index * 0.03 }}
               className="glass-panel"
               style={{ padding: "1.5rem", display: "flex", flexDirection: "column", gap: "1rem" }}
             >
@@ -590,11 +698,20 @@ export default function Dashboard() {
                     <span style={{ fontSize: "0.875rem", color: "var(--text-muted)" }}>
                       공고일: {item.notice_date ?? "미상"}
                     </span>
-                    {item.biz_type && (
-                      <span style={{ fontSize: "0.75rem", fontWeight: "600", padding: "0.25rem 0.5rem", background: "rgba(255, 255, 255, 0.1)", color: "var(--text-primary)", borderRadius: "4px" }}>
-                        {item.biz_type}
-                      </span>
-                    )}
+                    {item.biz_type && (() => {
+                      const cat = getEersCategory(item.biz_type);
+                      return cat ? (
+                        <span style={{ fontSize: "0.8rem", fontWeight: "700", padding: "0.25rem 0.65rem",
+                          background: cat.bg, color: cat.color, borderRadius: "6px",
+                          border: `1px solid ${cat.color}55`, letterSpacing: "0.01em" }}>
+                          {cat.emoji} {cat.label}
+                        </span>
+                      ) : (
+                        <span style={{ fontSize: "0.75rem", fontWeight: "600", padding: "0.25rem 0.5rem", background: "rgba(255,255,255,0.08)", color: "var(--text-secondary)", borderRadius: "4px" }}>
+                          {item.biz_type}
+                        </span>
+                      );
+                    })()}
                     <span style={{ fontSize: "0.75rem", fontWeight: "600", padding: "0.25rem 0.5rem", background: "rgba(255,255,255,0.05)", color: "var(--brand-primary)", borderRadius: "4px", border: "1px solid rgba(16,185,129,0.3)" }}>
                       {item.assigned_hq} › {item.assigned_office}
                     </span>
