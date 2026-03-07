@@ -641,7 +641,7 @@ export default function Dashboard() {
           <div style={{ fontSize: "0.82rem", color: "var(--text-muted)", display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
             <span style={{ color: "var(--text-secondary)", fontWeight: 600 }}>현재 필터:</span>
             <span style={{ background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.2)", borderRadius: "6px", padding: "0.15rem 0.5rem", color: "var(--brand-primary)" }}>
-              평부 {selectedHq} {selectedHq !== "전국" && selectedOffice !== "전체" ? `> ${selectedOffice}` : ""}
+              {selectedHq} {selectedHq !== "전국" && selectedOffice !== "전체" ? `> ${selectedOffice}` : ""}
             </span>
             {dateFrom && (
               <span style={{ background: "rgba(59,130,246,0.1)", border: "1px solid rgba(59,130,246,0.2)", borderRadius: "6px", padding: "0.15rem 0.5rem", color: "#60a5fa" }}>
@@ -651,7 +651,7 @@ export default function Dashboard() {
           </div>
           <button onClick={fetchAnnouncements} className="btn-primary"
             style={{ padding: "0.5rem 1.25rem", fontSize: "0.88rem", display: "flex", alignItems: "center", gap: "0.4rem" }}>
-            <Search size={15} /> 조건으로 조회
+            <Search size={15} /> 검색
           </button>
         </div>
       </div>

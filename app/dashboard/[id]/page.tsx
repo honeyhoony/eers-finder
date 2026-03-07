@@ -37,6 +37,16 @@ type Notice = {
   ai_call_tips: string | null;
 };
 
+// (물품) → (고효율 기기) 치환
+function fmtStage(stage: string | null) {
+  if (!stage) return null;
+  return stage
+    .replace(/\(실수\)/g, "(실수기기)")
+    .replace(/\(물품\)/g, "(고효율 기기)")
+    .replace(/\(용역\)/g, "(고효율 기기)")
+    .replace(/\(공사\)/g, "(시설\uacf5사)");
+}
+
 function ScoreBadge({ score }: { score: number }) {
   const color = score >= 85 ? "#10b981" : score >= 65 ? "#3b82f6" : score >= 40 ? "#f59e0b" : "#6b7280";
   const label = score >= 85 ? "매우 적합" : score >= 65 ? "적합" : score >= 40 ? "검토 필요" : "낮음";
@@ -273,7 +283,7 @@ export default function DetailPage() {
                 color: notice.source_system === "G2B" ? "#60a5fa" : "#34d399" }}>
                 {notice.source_system === "G2B" ? "나라장터" : "K-APT"}
               </span>
-              {notice.stage && <span style={{ fontSize: "0.8rem", padding: "0.2rem 0.6rem", borderRadius: "6px", background: "rgba(255,255,255,0.08)", color: "var(--text-secondary)" }}>{notice.stage}</span>}
+              {notice.stage && <span style={{ fontSize: "0.8rem", padding: "0.2rem 0.6rem", borderRadius: "6px", background: "rgba(255,255,255,0.08)", color: "var(--text-secondary)" }}>{fmtStage(notice.stage)}</span>}
               {notice.is_certified && notice.is_certified !== "확인필요" && (
                 <span style={{ fontSize: "0.8rem", padding: "0.2rem 0.6rem", borderRadius: "6px", background: "rgba(16,185,129,0.15)", color: "#34d399" }}>✅ {notice.is_certified}</span>
               )}
@@ -322,83 +332,128 @@ export default function DetailPage() {
         )}
       </motion.div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem", marginBottom: "1.5rem" }}>
-        {/* 수요기관 정보 */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
-          className="glass-panel" style={{ padding: "1.5rem" }}>
-          <h3 style={{ fontSize: "1rem", fontWeight: "700", marginBottom: "1rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
-            <Building2 size={18} color="var(--brand-secondary)" /> 수요기관 정보
-          </h3>
-          <InfoRow icon={<Building2 size={14} />} label="기관명" value={notice.client} copyable />
-          <InfoRow icon={<MapPin size={14} />} label="주소" value={notice.address} copyable />
-          <InfoRow icon={<Phone size={14} />} label="전화번호" value={notice.phone_number} link={notice.phone_number ? `tel:${notice.phone_number}` : undefined} />
-          <InfoRow icon={<Calendar size={14} />} label="공고일" value={notice.notice_date} />
-          <InfoRow icon={<DollarSign size={14} />} label="추정가격" value={fmtAmount(notice.amount)} />
-          <InfoRow icon={<Tag size={14} />} label="EERS 키워드" value={notice.biz_type} />
-        </motion.div>
-
-        {/* 외부 링크 */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}
-          className="glass-panel" style={{ padding: "1.5rem" }}>
-          <h3 style={{ fontSize: "1rem", fontWeight: "700", marginBottom: "1rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
-            <ExternalLink size={18} color="var(--brand-secondary)" /> 관련 링크 & 바로가기
-          </h3>
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
-
-            {/* ① 공고 원문 — G2B: detail_link 직접 / K-APT: 공고명 복사 후 이동 */}
-            {notice.source_system === "G2B" ? (
-              <a href={g2bDetailUrl} target="_blank" rel="noopener noreferrer"
-                style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.65rem 0.9rem", borderRadius: "8px", background: "rgba(59,130,246,0.1)", border: "1px solid rgba(59,130,246,0.25)", color: "#60a5fa", textDecoration: "none", fontSize: "0.875rem" }}>
-                <ExternalLink size={14} /> 📋 나라장터 입찰공고 원문 보기
-              </a>
-            ) : (
-              <>
-                <button onClick={handleKaptLink}
-                  style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.65rem 0.9rem", borderRadius: "8px", background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.25)", color: "#34d399", textDecoration: "none", fontSize: "0.875rem", cursor: "pointer", width: "100%", textAlign: "left" }}>
-                  <ExternalLink size={14} /> 🔍 K-APT 공고 검색하기 (공고명 자동복사)
-                </button>
-                {kaptCopied && (
-                  <div style={{ padding: "0.6rem 0.8rem", borderRadius: "8px", background: "rgba(16,185,129,0.12)", border: "1px solid rgba(16,185,129,0.3)", fontSize: "0.82rem", color: "var(--brand-primary)" }}>
-                    ✅ <strong>공고명이 복사되었습니다!</strong><br />
-                    K-APT 사이트에서 <kbd style={{ background: "rgba(255,255,255,0.1)", borderRadius: "3px", padding: "0 4px" }}>Ctrl+V</kbd>로 붙여넣기 후 검색해주세요.<br />
-                    <span style={{ color: "var(--text-muted)", fontSize: "0.78rem" }}>복사된 공고명: {notice.project_name}</span>
-                  </div>
-                )}
-              </>
-            )}
-
-            {/* ② 에너지공단 고효율 인증제품 목록 */}
-            <a href={keaUrl} target="_blank" rel="noopener noreferrer"
-              style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.65rem 0.9rem", borderRadius: "8px", background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.2)", color: "#34d399", textDecoration: "none", fontSize: "0.875rem" }}>
-              <Zap size={14} /> ⚡ 에너지공단 고효율 인증제품 목록
-            </a>
-
-            {/* ③ 한전ON EERS 고효율기기 신청 */}
-            <a href={hanjeonOnUrl} target="_blank" rel="noopener noreferrer"
-              style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.65rem 0.9rem", borderRadius: "8px", background: "rgba(139,92,246,0.1)", border: "1px solid rgba(139,92,246,0.2)", color: "#c4b5fd", textDecoration: "none", fontSize: "0.875rem" }}>
-              <ExternalLink size={14} /> 🔌 한전ON — EERS 고효율기기 신청
-            </a>
-
-            {/* ④ 나라장터 계약·입찰 통합 검색 */}
-            <a href="https://www.g2b.go.kr" target="_blank" rel="noopener noreferrer"
-              style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.65rem 0.9rem", borderRadius: "8px", background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)", color: "#f87171", textDecoration: "none", fontSize: "0.875rem" }}>
-              <ExternalLink size={14} /> 🏛️ 나라장터 메인
-            </a>
-
-            {/* ⑤ K-APT 공동주택관리정보시스템 */}
-            <a href={kaptMainUrl} target="_blank" rel="noopener noreferrer"
-              style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.65rem 0.9rem", borderRadius: "8px", background: "rgba(16,185,129,0.08)", border: "1px solid rgba(16,185,129,0.15)", color: "#6ee7b7", textDecoration: "none", fontSize: "0.875rem" }}>
-              <ExternalLink size={14} /> 🏘️ K-APT 공동주택관리정보시스템
-            </a>
+      {/* 수요기관 정보 — 전체 너비 1컨럼 */}
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
+        className="glass-panel" style={{ padding: "1.5rem", marginBottom: "1.5rem" }}>
+        <h3 style={{ fontSize: "1rem", fontWeight: "700", marginBottom: "1rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <Building2 size={18} color="var(--brand-secondary)" /> 수요기관 정보
+        </h3>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "0 2rem" }}>
+          <div>
+            <InfoRow icon={<Building2 size={14} />} label="기관명" value={notice.client} copyable />
+            <InfoRow icon={<MapPin size={14} />} label="주소" value={notice.address} copyable />
+            <InfoRow icon={<Tag size={14} />} label="EERS 품목 키워드" value={notice.biz_type} />
+            <InfoRow icon={<Calendar size={14} />} label="공고일" value={notice.notice_date} />
+            <InfoRow icon={<DollarSign size={14} />} label="추정가격" value={fmtAmount(notice.amount)} />
           </div>
+          <div>
+            {/* 전화번호 — 전화걸기 버튼 */}
+            {notice.phone_number && (
+              <div style={{ display: "flex", gap: "0.75rem", padding: "0.75rem 0", borderBottom: "1px solid var(--surface-border)", alignItems: "flex-start" }}>
+                <div style={{ color: "var(--brand-primary)", flexShrink: 0, marginTop: "2px" }}><Phone size={14} /></div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginBottom: "0.2rem" }}>전화번호</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+                    <span style={{ fontSize: "0.95rem", color: "white" }}>{notice.phone_number}</span>
+                    <a href={`tel:${notice.phone_number}`}
+                      style={{ padding: "0.2rem 0.6rem", borderRadius: "6px", background: "rgba(16,185,129,0.15)", border: "1px solid rgba(16,185,129,0.3)", color: "var(--brand-primary)", textDecoration: "none", fontSize: "0.78rem", display: "flex", alignItems: "center", gap: "0.3rem" }}>
+                      📞 전화걸기
+                    </a>
+                    <button onClick={() => navigator.clipboard.writeText(notice.phone_number!)}
+                      style={{ background: "rgba(255,255,255,0.08)", border: "none", borderRadius: "4px", padding: "2px 6px", cursor: "pointer", color: "var(--text-muted)", fontSize: "0.7rem" }}>
+                      <Copy size={10} style={{ marginRight: "2px" }} />복사
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+            <InfoRow icon={<CheckCircle size={14} />} label="고효율 인증" value={notice.is_certified && notice.is_certified !== "확인필요" ? notice.is_certified : null} />
+            {notice.source_system === "G2B" && notice.detail_link && (
+              <div style={{ padding: "0.75rem 0", borderBottom: "1px solid var(--surface-border)" }}>
+                <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginBottom: "0.3rem" }}>갵단입티 (담당자 연락정보)</div>
+                <a href={notice.detail_link} target="_blank" rel="noopener noreferrer"
+                  style={{ fontSize: "0.85rem", color: "#60a5fa", display: "flex", alignItems: "center", gap: "0.3rem" }}>
+                  <ExternalLink size={12} /> 나라장터 공고원문에서 담당자 전화/이메일 확인
+                </a>
+              </div>
+            )}
+          </div>
+        </div>
+      </motion.div>
 
-          {/* 공고명 복사 버튼 — 나라장터/K-APT 검색용 */}
-          <button onClick={() => copyText(notice.project_name, "공고명")}
-            style={{ marginTop: "0.75rem", width: "100%", padding: "0.5rem", borderRadius: "8px", background: "rgba(255,255,255,0.05)", border: "1px solid var(--surface-border)", color: "var(--text-muted)", cursor: "pointer", fontSize: "0.8rem", display: "flex", alignItems: "center", justifyContent: "center", gap: "0.4rem" }}>
-            <Copy size={12} /> {copied === "공고명" ? "✅ 공고명 복사됨" : "공고명 복사 (검색용)"}
-          </button>
-        </motion.div>
-      </div>
+      {/* 관련 링크 & 바로가기 — 별도 셀로 분리 */}
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}
+        className="glass-panel" style={{ padding: "1.5rem", marginBottom: "1.5rem" }}>
+        <h3 style={{ fontSize: "1rem", fontWeight: "700", marginBottom: "1rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <ExternalLink size={18} color="var(--brand-secondary)" /> 관련 링크 & 바로가기
+        </h3>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "0.6rem" }}>
+
+          {/* ① 공고 원문 — G2B: detail_link 직접 / K-APT: 공고명 복사 후 이동 */}
+          {notice.source_system === "G2B" ? (
+            <a href={g2bDetailUrl} target="_blank" rel="noopener noreferrer"
+              style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.65rem 0.9rem", borderRadius: "8px", background: "rgba(59,130,246,0.1)", border: "1px solid rgba(59,130,246,0.25)", color: "#60a5fa", textDecoration: "none", fontSize: "0.875rem" }}>
+              <ExternalLink size={14} /> 📋 담당자/입주정보 원문 보기
+            </a>
+          ) : (
+            <>
+              <button onClick={handleKaptLink}
+                style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.65rem 0.9rem", borderRadius: "8px", background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.25)", color: "#34d399", fontSize: "0.875rem", cursor: "pointer", width: "100%", textAlign: "left", borderStyle: "solid" }}>
+                <ExternalLink size={14} /> 🔍 K-APT 공고 검색 (공고명 자동복사)
+              </button>
+              {kaptCopied && (
+                <div style={{ padding: "0.6rem 0.8rem", borderRadius: "8px", background: "rgba(16,185,129,0.12)", border: "1px solid rgba(16,185,129,0.3)", fontSize: "0.82rem", color: "var(--brand-primary)" }}>
+                  ✅ <strong>공고명이 복사되었습니다!</strong><br />
+                  K-APT 사이트에서 <kbd style={{ background: "rgba(255,255,255,0.1)", borderRadius: "3px", padding: "0 4px" }}>Ctrl+V</kbd>로 붙여넣기 후 검색해주세요.<br />
+                  <span style={{ color: "var(--text-muted)", fontSize: "0.78rem" }}>복사된 공고명: {notice.project_name}</span>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* ② 나라장터 계약 입찰 통합공개 */}
+          <a href="https://www.g2b.go.kr:8101/ep/tbid/tbBidNtceDtlView.do" target="_blank" rel="noopener noreferrer"
+            style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.65rem 0.9rem", borderRadius: "8px", background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", color: "#f87171", textDecoration: "none", fontSize: "0.875rem" }}>
+            <ExternalLink size={14} /> 🏛️ 나라장터 입찰공고
+          </a>
+
+          {/* ③ 나라장터 계약정보 */}
+          <a href="https://www.g2b.go.kr:8081/ep/cntrct/cntrctInfoList.do" target="_blank" rel="noopener noreferrer"
+            style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.65rem 0.9rem", borderRadius: "8px", background: "rgba(251,191,36,0.08)", border: "1px solid rgba(251,191,36,0.2)", color: "#fbbf24", textDecoration: "none", fontSize: "0.875rem" }}>
+            <ExternalLink size={14} /> 📄 나라장터 계약정보
+          </a>
+
+          {/* ④ 종합쇼핑몰 */}
+          <a href="https://shopping.g2b.go.kr" target="_blank" rel="noopener noreferrer"
+            style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.65rem 0.9rem", borderRadius: "8px", background: "rgba(167,139,250,0.08)", border: "1px solid rgba(167,139,250,0.2)", color: "#c4b5fd", textDecoration: "none", fontSize: "0.875rem" }}>
+            <ExternalLink size={14} /> 🛒 조달청 종합쇼핑몰
+          </a>
+
+          {/* ⑤ 에너지공단 고효율 인증제품 */}
+          <a href={keaUrl} target="_blank" rel="noopener noreferrer"
+            style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.65rem 0.9rem", borderRadius: "8px", background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.2)", color: "#34d399", textDecoration: "none", fontSize: "0.875rem" }}>
+            <Zap size={14} /> ⚡ 에너지공단 고효율제품
+          </a>
+
+          {/* ⑥ 한전ON EERS 신청 */}
+          <a href={hanjeonOnUrl} target="_blank" rel="noopener noreferrer"
+            style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.65rem 0.9rem", borderRadius: "8px", background: "rgba(139,92,246,0.1)", border: "1px solid rgba(139,92,246,0.2)", color: "#c4b5fd", textDecoration: "none", fontSize: "0.875rem" }}>
+            <ExternalLink size={14} /> 🔌 한전ON EERS 신청
+          </a>
+
+          {/* ⑦ K-APT */}
+          <a href={kaptMainUrl} target="_blank" rel="noopener noreferrer"
+            style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.65rem 0.9rem", borderRadius: "8px", background: "rgba(16,185,129,0.06)", border: "1px solid rgba(16,185,129,0.15)", color: "#6ee7b7", textDecoration: "none", fontSize: "0.875rem" }}>
+            <ExternalLink size={14} /> 🏠 K-APT 공동주택
+          </a>
+        </div>
+
+        {/* 공고명 복사 */}
+        <button onClick={() => copyText(notice.project_name, "공고명")}
+          style={{ marginTop: "0.75rem", width: "100%", padding: "0.5rem", borderRadius: "8px", background: "rgba(255,255,255,0.05)", border: "1px solid var(--surface-border)", color: "var(--text-muted)", cursor: "pointer", fontSize: "0.8rem", display: "flex", alignItems: "center", justifyContent: "center", gap: "0.4rem" }}>
+          <Copy size={12} /> {copied === "공고명" ? "✅ 공고명 복사됨" : "공고명 복사 (검색용)"}
+        </button>
+      </motion.div>
 
       {/* AI 시방서 분석 */}
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
