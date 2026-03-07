@@ -43,6 +43,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         <nav style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
           {navLink("/dashboard/favorites", "❤️ 관심고객")}
+          {navLink("/dashboard/docs", "📄 공고문")}
           {navLink("/dashboard/profile", "👤 내 설정")}
           {(role === "S" || role === "A") && (
             <a href="/dashboard/admin" style={{

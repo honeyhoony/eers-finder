@@ -228,13 +228,24 @@ export default function DetailPage() {
     return `${n.toLocaleString()}원`;
   };
 
-  // 에너지공단 검색 URL
-  const keaSearchUrl = notice.model_name && notice.model_name !== "N/A"
-    ? `https://eep.energy.or.kr/building/efficiency_list.aspx?searchWord=${encodeURIComponent(notice.model_name)}`
-    : "https://eep.energy.or.kr/building/efficiency_list.aspx";
+  // ── 외부 링크 URL 상수 ──
+  // 1. 에너지공단 고효율 인증제품 목록
+  const keaUrl = "https://eep.energy.or.kr/higheff/hieff_intro.aspx";
+  // 2. 한전ON EERS 고효율기기 신청
+  const hanjeonOnUrl = "https://en-ter.co.kr/ft/biz/eers/eersApply/info.do";
+  // 3. 나라장터 입찰공고 원문 (DB에 저장된 detail_link 직접 사용)
+  const g2bDetailUrl = notice.detail_link ?? "https://www.g2b.go.kr";
+  // 4. K-APT 메인 (검색용; API가 상세링크 미제공 → 공고명 복사 안내)
+  const kaptMainUrl = "https://www.k-apt.go.kr/web/main/index.do";
 
-  // 나라장터 공고 검색 URL
-  const naraSearchUrl = `https://www.g2b.go.kr:8081/ep/main/mainPage.do`;
+  // K-APT 클릭: 공고명 복사 후 K-APT 열기
+  const [kaptCopied, setKaptCopied] = useState(false);
+  const handleKaptLink = () => {
+    navigator.clipboard.writeText(notice.project_name);
+    setKaptCopied(true);
+    setTimeout(() => setKaptCopied(false), 5000);
+    window.open(kaptMainUrl, "_blank", "noopener,noreferrer");
+  };
 
   return (
     <div style={{ maxWidth: "980px", margin: "0 auto", paddingBottom: "4rem" }}>
@@ -333,36 +344,58 @@ export default function DetailPage() {
             <ExternalLink size={18} color="var(--brand-secondary)" /> 관련 링크 & 바로가기
           </h3>
           <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
-            {notice.detail_link && (
-              <a href={notice.detail_link} target="_blank" rel="noopener noreferrer"
-                style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.6rem 0.8rem", borderRadius: "8px", background: notice.source_system === "G2B" ? "rgba(59,130,246,0.1)" : "rgba(16,185,129,0.1)", border: "1px solid rgba(59,130,246,0.2)", color: "#60a5fa", textDecoration: "none", fontSize: "0.875rem" }}>
-                <ExternalLink size={14} /> {notice.source_system === "G2B" ? "나라장터 원문 공고 보기" : "K-APT 원문 공고 보기"}
+
+            {/* ① 공고 원문 — G2B: detail_link 직접 / K-APT: 공고명 복사 후 이동 */}
+            {notice.source_system === "G2B" ? (
+              <a href={g2bDetailUrl} target="_blank" rel="noopener noreferrer"
+                style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.65rem 0.9rem", borderRadius: "8px", background: "rgba(59,130,246,0.1)", border: "1px solid rgba(59,130,246,0.25)", color: "#60a5fa", textDecoration: "none", fontSize: "0.875rem" }}>
+                <ExternalLink size={14} /> 📋 나라장터 입찰공고 원문 보기
               </a>
+            ) : (
+              <>
+                <button onClick={handleKaptLink}
+                  style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.65rem 0.9rem", borderRadius: "8px", background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.25)", color: "#34d399", textDecoration: "none", fontSize: "0.875rem", cursor: "pointer", width: "100%", textAlign: "left" }}>
+                  <ExternalLink size={14} /> 🔍 K-APT 공고 검색하기 (공고명 자동복사)
+                </button>
+                {kaptCopied && (
+                  <div style={{ padding: "0.6rem 0.8rem", borderRadius: "8px", background: "rgba(16,185,129,0.12)", border: "1px solid rgba(16,185,129,0.3)", fontSize: "0.82rem", color: "var(--brand-primary)" }}>
+                    ✅ <strong>공고명이 복사되었습니다!</strong><br />
+                    K-APT 사이트에서 <kbd style={{ background: "rgba(255,255,255,0.1)", borderRadius: "3px", padding: "0 4px" }}>Ctrl+V</kbd>로 붙여넣기 후 검색해주세요.<br />
+                    <span style={{ color: "var(--text-muted)", fontSize: "0.78rem" }}>복사된 공고명: {notice.project_name}</span>
+                  </div>
+                )}
+              </>
             )}
-            <a href={keaSearchUrl} target="_blank" rel="noopener noreferrer"
-              style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.6rem 0.8rem", borderRadius: "8px", background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.2)", color: "#34d399", textDecoration: "none", fontSize: "0.875rem" }}>
-              <Zap size={14} /> 에너지공단 고효율 등급 확인
-              {notice.model_name && notice.model_name !== "N/A" && <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>({notice.model_name})</span>}
+
+            {/* ② 에너지공단 고효율 인증제품 목록 */}
+            <a href={keaUrl} target="_blank" rel="noopener noreferrer"
+              style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.65rem 0.9rem", borderRadius: "8px", background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.2)", color: "#34d399", textDecoration: "none", fontSize: "0.875rem" }}>
+              <Zap size={14} /> ⚡ 에너지공단 고효율 인증제품 목록
             </a>
-            <a href="https://www.kepco.co.kr/kepco/CM/C/CMCC0101.do" target="_blank" rel="noopener noreferrer"
-              style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.6rem 0.8rem", borderRadius: "8px", background: "rgba(139,92,246,0.1)", border: "1px solid rgba(139,92,246,0.2)", color: "#c4b5fd", textDecoration: "none", fontSize: "0.875rem" }}>
-              <ExternalLink size={14} /> 한전ON EERS 신청 안내
+
+            {/* ③ 한전ON EERS 고효율기기 신청 */}
+            <a href={hanjeonOnUrl} target="_blank" rel="noopener noreferrer"
+              style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.65rem 0.9rem", borderRadius: "8px", background: "rgba(139,92,246,0.1)", border: "1px solid rgba(139,92,246,0.2)", color: "#c4b5fd", textDecoration: "none", fontSize: "0.875rem" }}>
+              <ExternalLink size={14} /> 🔌 한전ON — EERS 고효율기기 신청
             </a>
-            <a href={naraSearchUrl} target="_blank" rel="noopener noreferrer"
-              style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.6rem 0.8rem", borderRadius: "8px", background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)", color: "#f87171", textDecoration: "none", fontSize: "0.875rem" }}>
-              <ExternalLink size={14} /> 나라장터 바로가기
+
+            {/* ④ 나라장터 계약·입찰 통합 검색 */}
+            <a href="https://www.g2b.go.kr" target="_blank" rel="noopener noreferrer"
+              style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.65rem 0.9rem", borderRadius: "8px", background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)", color: "#f87171", textDecoration: "none", fontSize: "0.875rem" }}>
+              <ExternalLink size={14} /> 🏛️ 나라장터 메인
             </a>
-            {notice.kapt_code && (
-              <a href={`https://www.k-apt.go.kr/apt/aptInfo.do?code=${notice.kapt_code}`} target="_blank" rel="noopener noreferrer"
-                style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.6rem 0.8rem", borderRadius: "8px", background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.2)", color: "#34d399", textDecoration: "none", fontSize: "0.875rem" }}>
-                <ExternalLink size={14} /> K-APT 단지 정보 ({notice.kapt_code})
-              </a>
-            )}
+
+            {/* ⑤ K-APT 공동주택관리정보시스템 */}
+            <a href={kaptMainUrl} target="_blank" rel="noopener noreferrer"
+              style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.65rem 0.9rem", borderRadius: "8px", background: "rgba(16,185,129,0.08)", border: "1px solid rgba(16,185,129,0.15)", color: "#6ee7b7", textDecoration: "none", fontSize: "0.875rem" }}>
+              <ExternalLink size={14} /> 🏘️ K-APT 공동주택관리정보시스템
+            </a>
           </div>
-          {/* 공고명 복사 (나라장터 검색용) */}
+
+          {/* 공고명 복사 버튼 — 나라장터/K-APT 검색용 */}
           <button onClick={() => copyText(notice.project_name, "공고명")}
             style={{ marginTop: "0.75rem", width: "100%", padding: "0.5rem", borderRadius: "8px", background: "rgba(255,255,255,0.05)", border: "1px solid var(--surface-border)", color: "var(--text-muted)", cursor: "pointer", fontSize: "0.8rem", display: "flex", alignItems: "center", justifyContent: "center", gap: "0.4rem" }}>
-            <Copy size={12} /> {copied === "공고명" ? "✅ 복사됨" : "공고명 복사 (나라장터 검색용)"}
+            <Copy size={12} /> {copied === "공고명" ? "✅ 공고명 복사됨" : "공고명 복사 (검색용)"}
           </button>
         </motion.div>
       </div>
@@ -438,7 +471,7 @@ export default function DetailPage() {
             <div style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>담당자 유선 안내용 맞춤형 화법 생성</div>
           </div>
         </button>
-        <a href={keaSearchUrl} target="_blank" rel="noopener noreferrer" className="glass-panel"
+        <a href={keaUrl} target="_blank" rel="noopener noreferrer" className="glass-panel"
           style={{ display: "flex", alignItems: "center", gap: "1rem", textDecoration: "none", padding: "1.25rem" }}>
           <div style={{ width: "48px", height: "48px", borderRadius: "12px", background: "rgba(16,185,129,0.3)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
             <Zap size={22} color="#34d399" />
