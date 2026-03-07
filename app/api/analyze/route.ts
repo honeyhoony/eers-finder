@@ -40,8 +40,9 @@ function extractJSON(text: string): Record<string, unknown> {
 }
 
 async function callGemini(prompt: string, key: string): Promise<AIResult> {
+  const cleanKey = key.replace(/[^\x00-\x7F]/g, "").trim();
   const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${cleanKey}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -67,11 +68,12 @@ async function callGemini(prompt: string, key: string): Promise<AIResult> {
 }
 
 async function callOpenAI(prompt: string, key: string): Promise<AIResult> {
+  const cleanKey = key.replace(/[^\x00-\x7F]/g, "").trim();
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${key}`,
+      "Authorization": `Bearer ${cleanKey}`,
     },
     body: JSON.stringify({
       model: "gpt-4o-mini",
