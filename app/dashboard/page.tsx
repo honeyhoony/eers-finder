@@ -6,9 +6,9 @@ import { Search, Loader2, FileText, CheckCircle, Database, ArrowRight, Calendar 
 import { createClient } from "@/utils/supabase/client";
 import Link from "next/link";
 
-// 날짜 유틸
-const fmt = (d: Date) => d.toISOString().slice(0, 10).replace(/-/g, "");
-const toDisplay = (ymd: string) => ymd ? `${ymd.slice(0,4)}-${ymd.slice(4,6)}-${ymd.slice(6,8)}` : "";
+// 날짜 유틸 — Supabase notice_date 는 "2026-03-07" ISO 형식으로 저장됨
+const fmt = (d: Date) => d.toISOString().slice(0, 10);           // "2026-03-07"
+const toDisplay = (iso: string) => iso ? iso.replace(/-/g, ".") : ""; // "2026.03.07"
 
 type DatePreset = "오늘" | "이번주" | "이번달" | "직접선택";
 
