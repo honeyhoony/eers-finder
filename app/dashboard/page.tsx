@@ -43,8 +43,13 @@ type BidNotice = {
   assigned_hq: string | null;
   ai_suitability_score: number | null;
   ai_suitability_reason: string | null;
-  status: "pending" | "contacted" | "completed";
+  status: string | null;
   notice_date: string | null;
+  client: string | null;
+  phone_number: string | null;
+  model_name: string | null;
+  quantity: number | null;
+  is_favorite: boolean;
 };
 
 // 전국 본부 → 관할 사업소 계층 구조
@@ -84,12 +89,14 @@ export default function Dashboard() {
   const [collecting, setCollecting] = useState(false);
   const [collectMsg, setCollectMsg] = useState<string | null>(null);
   const [showCollectModal, setShowCollectModal] = useState(false);
-  const [collectDate, setCollectDate] = useState(""); // YYYYMMDD, 비우면 오늘
+  const [collectDate, setCollectDate] = useState("");
   const [showAdminModal, setShowAdminModal] = useState(false);
   const [adminEmail, setAdminEmail] = useState("");
   const [adminList, setAdminList] = useState<{email: string; name: string | null}[]>([]);
   const [adminMsg, setAdminMsg] = useState<string | null>(null);
+  const [favMap, setFavMap] = useState<Record<number, boolean>>({});
   const supabase = createClient();
+  const [userId, setUserId] = useState<string | null>(null);
 
   const officeList = selectedHq === "전국" ? [] : HQ_OFFICE_MAP[selectedHq] || [];
 
@@ -156,32 +163,32 @@ export default function Dashboard() {
     setSelectedOffice("전체");
   };
 
-  // 관리자 여부 확인
+  // 관리자 여부 확인 + 사용자 ID 저장 + 관심 공고 로드
   useEffect(() => {
     const checkAdmin = async () => {
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-      console.log("[checkAdmin] user:", user?.email, "error:", userError);
+      const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
+      setUserId(user.id);
 
-      const { data, error: profileError } = await supabase
+      const { data } = await supabase
         .from("profiles")
-        .select("is_admin, email")
-        .eq("id", user.id)
-        .single();
-      console.log("[checkAdmin] profile:", data, "error:", profileError);
+        .select("is_admin, role, email")
+        .eq("id", user.id).single();
 
-      if (data?.is_admin) {
-        console.log("[checkAdmin] ✅ 관리자 확인됨");
-        setIsAdmin(true);
-      } else {
-        // fallback: email로 직접 체크
-        const { data: d2 } = await supabase
-          .from("profiles")
-          .select("is_admin")
-          .eq("email", user.email)
-          .single();
-        console.log("[checkAdmin] fallback profile:", d2);
+      if (data?.is_admin || data?.role === "S" || data?.role === "A") setIsAdmin(true);
+      else {
+        // fallback by email
+        const { data: d2 } = await supabase.from("profiles").select("is_admin").eq("email", user.email!).single();
         if (d2?.is_admin) setIsAdmin(true);
+      }
+
+      // 관심 공고 맵 로드 (user_favorites 테이블)
+      const { data: favs } = await supabase
+        .from("user_favorites").select("notice_id").eq("user_id", user.id);
+      if (favs) {
+        const m: Record<number, boolean> = {};
+        favs.forEach((f: { notice_id: number }) => { m[f.notice_id] = true; });
+        setFavMap(m);
       }
     };
     checkAdmin();
@@ -244,6 +251,18 @@ export default function Dashboard() {
   useEffect(() => {
     fetchAnnouncements();
   }, [fetchAnnouncements]);
+
+  // 관심 고객 토글 (user_favorites 테이블)
+  const handleToggleFav = async (noticeId: number) => {
+    if (!userId) return;
+    const isFav = !!favMap[noticeId];
+    setFavMap(prev => ({ ...prev, [noticeId]: !isFav }));
+    if (isFav) {
+      await supabase.from("user_favorites").delete().eq("user_id", userId).eq("notice_id", noticeId);
+    } else {
+      await supabase.from("user_favorites").insert({ user_id: userId, notice_id: noticeId, status: "미접촉" });
+    }
+  };
 
   return (
     <div style={{ maxWidth: "1200px", margin: "0 auto" }}>
@@ -587,14 +606,29 @@ export default function Dashboard() {
                   </p>
                 </div>
 
-                {item.ai_suitability_score !== null && item.ai_suitability_score > 0 && (
-                  <div style={{ textAlign: "right", flexShrink: 0, marginLeft: "1rem" }}>
-                    <div style={{ fontSize: "2rem", fontWeight: "800", color: item.ai_suitability_score >= 90 ? "var(--brand-primary)" : "var(--text-primary)", lineHeight: "1" }}>
-                      {item.ai_suitability_score}점
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "0.5rem", flexShrink: 0, marginLeft: "1rem" }}>
+                  {/* ❤️ 관심고객 하트 */}
+                  <button
+                    onClick={e => { e.preventDefault(); handleToggleFav(item.id); }}
+                    title={favMap[item.id] ? "관심고객 해제" : "관심고객 등록"}
+                    style={{ width: "36px", height: "36px", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", transition: "all 0.2s",
+                      background: favMap[item.id] ? "rgba(239,68,68,0.15)" : "rgba(255,255,255,0.05)",
+                      border: favMap[item.id] ? "1px solid rgba(239,68,68,0.4)" : "1px solid var(--surface-border)" }}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill={favMap[item.id] ? "#f87171" : "none"}
+                      stroke={favMap[item.id] ? "#f87171" : "var(--text-muted)"} strokeWidth="2">
+                      <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+                    </svg>
+                  </button>
+                  {/* AI 적합도 점수 */}
+                  {item.ai_suitability_score !== null && item.ai_suitability_score > 0 && (
+                    <div style={{ textAlign: "right" }}>
+                      <div style={{ fontSize: "2rem", fontWeight: "800", color: item.ai_suitability_score >= 90 ? "var(--brand-primary)" : "var(--text-primary)", lineHeight: "1" }}>
+                        {item.ai_suitability_score}점
+                      </div>
+                      <span style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>AI 적합도</span>
                     </div>
-                    <span style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>AI 적합도 평가</span>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
 
               {item.ai_suitability_reason ? (

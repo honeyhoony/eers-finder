@@ -1,13 +1,20 @@
 -- ============================================================
--- EERS AI 파인더 — Supabase 추가 마이그레이션
--- Supabase SQL Editor에서 실행하세요
+-- EERS AI 파인더 — 전체 스키마 마이그레이션 v2
+-- Supabase SQL Editor에서 전체 실행하세요
 -- ============================================================
 
--- 1. profiles 테이블에 phone 컬럼 추가 (없으면)
+-- ── 1. profiles 테이블 컬럼 추가 ──
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS phone text;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS hq text;       -- 지역본부
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS office text;   -- 사업소
+-- role: S = 최고관리자, A = 지역본부 관리자, B = 일반 사용자
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS role text DEFAULT 'B';
 
--- 2. notices 테이블 컬럼 추가 (Python collect_data.py와 동기화)
--- 이미 notices 테이블이 있다면 아래 SQL로 컬럼 추가
+-- S급 최고관리자 설정
+UPDATE public.profiles SET role = 'S', is_admin = true, hq = '한국전력공사', office = '에너지효율부'
+WHERE email = 'jeon.bh@kepco.co.kr';
+
+-- ── 2. notices 테이블 컬럼 동기화 ──
 ALTER TABLE public.notices ADD COLUMN IF NOT EXISTS stage text;
 ALTER TABLE public.notices ADD COLUMN IF NOT EXISTS client text;
 ALTER TABLE public.notices ADD COLUMN IF NOT EXISTS phone_number text;
@@ -22,68 +29,82 @@ ALTER TABLE public.notices ADD COLUMN IF NOT EXISTS ai_call_tips text DEFAULT ''
 ALTER TABLE public.notices ADD COLUMN IF NOT EXISTS assigned_hq text DEFAULT '본부확인요망';
 ALTER TABLE public.notices ADD COLUMN IF NOT EXISTS source_system text DEFAULT 'G2B';
 
--- 3. notices 테이블이 없으면 새로 생성 (Python database.py와 동기화)
-CREATE TABLE IF NOT EXISTS public.notices (
-  id                   serial PRIMARY KEY,
-  is_favorite          boolean DEFAULT false,
-  stage                text,
-  biz_type             text,
-  project_name         text NOT NULL,
-  client               text,
-  address              text,
-  phone_number         text,
-  model_name           text DEFAULT 'N/A',
-  quantity             integer,
-  amount               text,
-  is_certified         text,
-  notice_date          text,
-  detail_link          text NOT NULL,
-  assigned_office      text DEFAULT '관할지사확인요망',
-  assigned_hq          text DEFAULT '본부확인요망',
-  status               text DEFAULT '',
-  memo                 text DEFAULT '',
-  source_system        text DEFAULT 'G2B',
-  kapt_code            text,
-  ai_suitability_score integer DEFAULT 0,
-  ai_suitability_reason text DEFAULT '',
-  ai_call_tips         text DEFAULT ''
+-- ── 3. user_favorites 테이블 (사용자별 관심고객 + 진행상황) ──
+CREATE TABLE IF NOT EXISTS public.user_favorites (
+  id            serial PRIMARY KEY,
+  user_id       uuid REFERENCES auth.users ON DELETE CASCADE NOT NULL,
+  notice_id     integer NOT NULL,
+  status        text DEFAULT '미접촉',  -- 미접촉, 전화완료, 메일발송, 방문예정, 진행중, 완료, 포기
+  memo          text DEFAULT '',
+  contact_date  text,                  -- 최초 접촉일 (YYYY-MM-DD)
+  last_action   text,                  -- 마지막 행동 메모
+  created_at    timestamp with time zone DEFAULT now(),
+  updated_at    timestamp with time zone DEFAULT now(),
+  UNIQUE(user_id, notice_id)
 );
 
--- 4. notices RLS 정책 (모든 로그인 사용자가 읽기 가능)
-ALTER TABLE public.notices ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_favorites ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users manage own favorites" ON public.user_favorites
+  FOR ALL USING (auth.uid() = user_id);
 
--- 기존 정책 삭제 후 재생성
+-- ── 4. notification_settings 테이블 (관리자 알림 설정) ──
+CREATE TABLE IF NOT EXISTS public.notification_settings (
+  id              serial PRIMARY KEY,
+  created_by      uuid REFERENCES auth.users,
+  notify_type     text DEFAULT 'email',  -- email, sms, both
+  target_role     text DEFAULT 'all',    -- all, A, B
+  target_emails   text,                  -- 쉼표 구분, 비우면 role 전체
+  is_active       boolean DEFAULT true,
+  schedule        text DEFAULT 'daily',  -- daily, weekly, manual
+  note            text,
+  created_at      timestamp with time zone DEFAULT now()
+);
+
+ALTER TABLE public.notification_settings ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Only admins manage notifications" ON public.notification_settings
+  FOR ALL USING (
+    (SELECT role FROM public.profiles WHERE id = auth.uid()) IN ('S', 'A')
+  );
+
+-- ── 5. notices RLS 정책 (로그인 사용자 전체 읽기 + 쓰기) ──
+ALTER TABLE public.notices ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Authenticated can read notices" ON public.notices;
 CREATE POLICY "Authenticated can read notices" ON public.notices
   FOR SELECT USING (auth.role() = 'authenticated');
-
 DROP POLICY IF EXISTS "Authenticated can update notices" ON public.notices;
 CREATE POLICY "Authenticated can update notices" ON public.notices
   FOR UPDATE USING (auth.role() = 'authenticated');
+DROP POLICY IF EXISTS "Admins can insert notices" ON public.notices;
+CREATE POLICY "Admins can insert notices" ON public.notices
+  FOR INSERT WITH CHECK (
+    (SELECT role FROM public.profiles WHERE id = auth.uid()) IN ('S', 'A')
+  );
 
--- 5. profiles 테이블 RLS — 관리자가 다른 사용자 업데이트 허용
+-- ── 6. profiles RLS 업데이트 ──
 DROP POLICY IF EXISTS "Admin can update any profile." ON public.profiles;
 CREATE POLICY "Admin can update any profile." ON public.profiles
   FOR UPDATE USING (
     auth.uid() = id OR
-    (SELECT is_admin FROM public.profiles WHERE id = auth.uid()) = true
+    (SELECT role FROM public.profiles WHERE id = auth.uid()) = 'S'
   );
 
--- 6. 초기 관리자 계정 설정 (profiles에 이미 사용자가 있는 경우)
--- auth.users에서 해당 이메일로 먼저 로그인한 사용자의 UUID를 찾아 업데이트
-UPDATE public.profiles
-SET is_admin = true
-WHERE email = 'jeon.bh@kepco.co.kr';
+-- S급만 A급 지정 가능 (application level에서도 체크)
+DROP POLICY IF EXISTS "S admin can set A role" ON public.profiles;
+CREATE POLICY "S admin can set A role" ON public.profiles
+  FOR UPDATE USING (
+    (SELECT role FROM public.profiles WHERE id = auth.uid()) = 'S'
+  );
 
--- 7. 자동 프로필 생성 트리거 (재생성)
+-- ── 7. 자동 프로필 생성 트리거 (재정의) ──
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS trigger AS $$
 BEGIN
-  INSERT INTO public.profiles (id, email, name, is_admin)
+  INSERT INTO public.profiles (id, email, name, role, is_admin)
   VALUES (
     NEW.id,
     NEW.email,
     COALESCE(NEW.raw_user_meta_data->>'name', split_part(NEW.email, '@', 1)),
+    CASE WHEN NEW.email = 'jeon.bh@kepco.co.kr' THEN 'S' ELSE 'B' END,
     CASE WHEN NEW.email = 'jeon.bh@kepco.co.kr' THEN true ELSE false END
   )
   ON CONFLICT (id) DO NOTHING;
