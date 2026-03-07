@@ -1385,6 +1385,7 @@ def assign_offices_by_address(addr: str) -> List[str]:
             return candidates
 
     # ── 4) 경북권(그 외 시군) ──
+    # 대구본부 관할 경북
     if "경주시" in addr:  return ["경주지사"]
     if "경산시" in addr:  return ["경산지사"]
     if "김천시" in addr:  return ["김천지사"]
@@ -1394,6 +1395,21 @@ def assign_offices_by_address(addr: str) -> List[str]:
     if "청도군" in addr:  return ["청도지사"]
     if "고령군" in addr:  return ["고령지사"]
     if "영덕군" in addr:  return ["영덕지사"]
+    if "울릉군" in addr:  return ["울릉지사"]
+    
+    # 경북본부 관할 경북
+    if "안동시" in addr:  return ["안동지사"]
+    if "구미시" in addr:  return ["구미지사"]
+    if "상주시" in addr:  return ["상주지사"]
+    if "영주시" in addr:  return ["영주지사"]
+    if "의성군" in addr:  return ["의성지사"]
+    if "문경시" in addr:  return ["문경지사"]
+    if "예천군" in addr:  return ["예천지사"]
+    if "봉화군" in addr:  return ["봉화지사"]
+    if "울진군" in addr:  return ["울진지사"]
+    if "군위군" in addr:  return ["군위지사"]
+    if "청송군" in addr:  return ["청송지사"]
+    if "영양군" in addr:  return ["영양지사"]
 
     # ── 5) 기타 ──
     if "달서구" in addr or "달성군" in addr:
@@ -2337,8 +2353,14 @@ def _assign_office_from_bjd_code(bjd_code: str, addr_text: str = "") -> str:
 
     # ─ 경북 기타
     mapping = {
+        # 대구본부 관할
         "경주": "경주지사","경산": "경산지사","김천": "김천지사","영천": "영천지사",
-        "칠곡": "칠곡지사","성주": "성주지사","청도": "청도지사","고령": "고령지사","영덕": "영덕지사",
+        "칠곡": "칠곡지사","성주": "성주지사","청도": "청도지사","고령": "고령지사",
+        "영덕": "영덕지사","울릉": "울릉지사",
+        # 경북본부 관할
+        "안동": "안동지사","구미": "구미지사","상주": "상주지사","영주": "영주지사",
+        "의성": "의성지사","문경": "문경지사","예천": "예천지사","봉화": "봉화지사",
+        "울진": "울진지사","군위": "군위지사","청송": "청송지사","영양": "영양지사"
     }
     for key, office in mapping.items():
         if key in addr:
