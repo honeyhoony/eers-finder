@@ -233,6 +233,16 @@ export default function DetailPage() {
     }
   };
 
+  // K-APT 클릭: 공고명 복사 후 K-APT 열기
+  const [kaptCopied, setKaptCopied] = useState(false);
+  const handleKaptLink = () => {
+    if (!notice) return;
+    navigator.clipboard.writeText(notice.project_name);
+    setKaptCopied(true);
+    setTimeout(() => setKaptCopied(false), 5000);
+    window.open(kaptMainUrl, "_blank", "noopener,noreferrer");
+  };
+
   if (loading) return (
     <div style={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "60vh" }}>
       <div style={{ width: "48px", height: "48px", border: "4px solid var(--surface-border)", borderTopColor: "var(--brand-primary)", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
@@ -264,15 +274,6 @@ export default function DetailPage() {
   const g2bDetailUrl = notice.detail_link ?? "https://www.g2b.go.kr";
   // 4. K-APT 메인 (검색용; API가 상세링크 미제공 → 공고명 복사 안내)
   const kaptMainUrl = "https://www.k-apt.go.kr/web/main/index.do";
-
-  // K-APT 클릭: 공고명 복사 후 K-APT 열기
-  const [kaptCopied, setKaptCopied] = useState(false);
-  const handleKaptLink = () => {
-    navigator.clipboard.writeText(notice.project_name);
-    setKaptCopied(true);
-    setTimeout(() => setKaptCopied(false), 5000);
-    window.open(kaptMainUrl, "_blank", "noopener,noreferrer");
-  };
 
   return (
     <div style={{ maxWidth: "980px", margin: "0 auto", paddingBottom: "4rem" }}>
