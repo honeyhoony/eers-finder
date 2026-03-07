@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { Search, Loader2, FileText, CheckCircle, Database, ArrowRight, Calendar } from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
@@ -76,15 +76,37 @@ export default function Dashboard() {
   const [datePreset, setDatePreset] = useState<DatePreset>("이번달");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo]   = useState("");
+  // 날짜 범위 (서버/클라이언트 hydration 불일치 방지 위해 초기값 빈 문자열)
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo]     = useState("");
+  const [mounted, setMounted]   = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [collecting, setCollecting] = useState(false);
+  const [collectMsg, setCollectMsg] = useState<string | null>(null);
+  const [showAdminModal, setShowAdminModal] = useState(false);
+  const [adminEmail, setAdminEmail] = useState("");
+  const [adminList, setAdminList] = useState<{email: string; name: string | null}[]>([]);
+  const [adminMsg, setAdminMsg] = useState<string | null>(null);
   const supabase = createClient();
 
   const officeList = selectedHq === "전국" ? [] : HQ_OFFICE_MAP[selectedHq] || [];
 
-  // 날짜 범위 계산
-  const { from: dateFrom, to: dateTo } = useMemo(() => {
-    if (datePreset === "직접선택") return { from: customFrom, to: customTo };
-    return getPresetRange(datePreset);
-  }, [datePreset, customFrom, customTo]);
+  // 클라이언트 마운트 후에만 날짜 계산 (Hydration 에러 방지)
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
+    if (datePreset === "직접선택") {
+      setDateFrom(customFrom);
+      setDateTo(customTo);
+    } else {
+      const range = getPresetRange(datePreset);
+      setDateFrom(range.from);
+      setDateTo(range.to);
+    }
+  }, [mounted, datePreset, customFrom, customTo]);
 
   const fetchAnnouncements = useCallback(async () => {
     setLoading(true);
@@ -132,6 +154,86 @@ export default function Dashboard() {
     setSelectedOffice("전체");
   };
 
+  // 관리자 여부 확인
+  useEffect(() => {
+    const checkAdmin = async () => {
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      console.log("[checkAdmin] user:", user?.email, "error:", userError);
+      if (!user) return;
+
+      const { data, error: profileError } = await supabase
+        .from("profiles")
+        .select("is_admin, email")
+        .eq("id", user.id)
+        .single();
+      console.log("[checkAdmin] profile:", data, "error:", profileError);
+
+      if (data?.is_admin) {
+        console.log("[checkAdmin] ✅ 관리자 확인됨");
+        setIsAdmin(true);
+      } else {
+        // fallback: email로 직접 체크
+        const { data: d2 } = await supabase
+          .from("profiles")
+          .select("is_admin")
+          .eq("email", user.email)
+          .single();
+        console.log("[checkAdmin] fallback profile:", d2);
+        if (d2?.is_admin) setIsAdmin(true);
+      }
+    };
+    checkAdmin();
+  }, [supabase]);
+
+  // 관리자 전용: 데이터 수집 트리거
+  const handleCollect = async () => {
+    setCollecting(true);
+    setCollectMsg(null);
+    try {
+      const res = await fetch("/api/collect", { method: "POST" });
+      const json = await res.json();
+      if (res.ok) {
+        setCollectMsg("✅ " + json.message);
+        setTimeout(() => fetchAnnouncements(), 5000);
+      } else {
+        setCollectMsg("❌ " + json.error);
+      }
+    } catch {
+      setCollectMsg("❌ 네트워크 오류가 발생했습니다.");
+    } finally {
+      setCollecting(false);
+    }
+  };
+
+  // 관리자 목록 불러오기
+  const loadAdminList = async () => {
+    const res = await fetch("/api/admin", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "list", email: "" }),
+    });
+    const json = await res.json();
+    if (json.admins) setAdminList(json.admins);
+  };
+
+  // 관리자 추가/해제
+  const handleAdminAction = async (action: "add" | "remove", email: string) => {
+    setAdminMsg(null);
+    const res = await fetch("/api/admin", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, email }),
+    });
+    const json = await res.json();
+    if (res.ok) {
+      setAdminMsg("✅ " + json.message);
+      setAdminEmail("");
+      loadAdminList();
+    } else {
+      setAdminMsg("❌ " + json.error);
+    }
+  };
+
   useEffect(() => {
     fetchAnnouncements();
   }, [fetchAnnouncements]);
@@ -140,10 +242,131 @@ export default function Dashboard() {
     <div style={{ maxWidth: "1200px", margin: "0 auto" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem", flexWrap: "wrap", gap: "1rem" }}>
         <h1 style={{ fontSize: "2rem", fontWeight: "700" }}>맞춤형 공고 분석 대시보드</h1>
-        <button onClick={fetchAnnouncements} className="btn-primary" style={{ padding: "0.5rem 1rem", fontSize: "0.875rem" }}>
-          <Search size={16} /> 최신화
-        </button>
+        <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
+          {/* 관리자 전용 버튼 구역 */}
+          {isAdmin && (
+            <>
+              <button
+                onClick={handleCollect}
+                disabled={collecting}
+                style={{
+                  padding: "0.5rem 1.1rem", fontSize: "0.875rem", borderRadius: "8px",
+                  background: collecting ? "rgba(255,255,255,0.1)" : "rgba(139,92,246,0.2)",
+                  border: "1px solid rgba(139,92,246,0.5)",
+                  color: collecting ? "var(--text-muted)" : "#c4b5fd",
+                  cursor: collecting ? "wait" : "pointer",
+                  display: "flex", alignItems: "center", gap: "0.4rem",
+                  transition: "all 0.2s",
+                }}
+              >
+                {collecting ? "⏳ 수집 중..." : "🔄 데이터 수집"}
+              </button>
+              <button
+                onClick={() => { setShowAdminModal(true); loadAdminList(); setAdminMsg(null); }}
+                style={{
+                  padding: "0.5rem 1.1rem", fontSize: "0.875rem", borderRadius: "8px",
+                  background: "rgba(59,130,246,0.15)",
+                  border: "1px solid rgba(59,130,246,0.4)",
+                  color: "#93c5fd",
+                  cursor: "pointer",
+                  display: "flex", alignItems: "center", gap: "0.4rem",
+                  transition: "all 0.2s",
+                }}
+              >
+                👤 관리자 관리
+              </button>
+            </>
+          )}
+          <button onClick={fetchAnnouncements} className="btn-primary" style={{ padding: "0.5rem 1rem", fontSize: "0.875rem" }}>
+            <Search size={16} /> 최신화
+          </button>
+        </div>
       </div>
+      {/* 관리자 모달 */}
+      {showAdminModal && (
+        <div style={{
+          position: "fixed", inset: 0, zIndex: 9999,
+          background: "rgba(0,0,0,0.7)", backdropFilter: "blur(4px)",
+          display: "flex", alignItems: "center", justifyContent: "center", padding: "1rem"
+        }} onClick={() => setShowAdminModal(false)}>
+          <div className="glass-panel" style={{ width: "100%", maxWidth: "480px", padding: "2rem" }}
+            onClick={(e) => e.stopPropagation()}>
+            <h2 style={{ fontSize: "1.4rem", fontWeight: "700", marginBottom: "1.5rem" }}>👤 관리자 관리</h2>
+
+            {/* 관리자 추가 */}
+            <div style={{ marginBottom: "1.5rem" }}>
+              <label style={{ fontSize: "0.8rem", color: "var(--text-muted)", display: "block", marginBottom: "0.4rem" }}>관리자로 추가할 한전 이메일</label>
+              <div style={{ display: "flex", gap: "0.5rem" }}>
+                <input
+                  type="email"
+                  placeholder="사번@kepco.co.kr"
+                  value={adminEmail}
+                  onChange={(e) => setAdminEmail(e.target.value)}
+                  style={{
+                    flex: 1, padding: "0.6rem 0.8rem", borderRadius: "8px",
+                    background: "rgba(0,0,0,0.3)", border: "1px solid var(--surface-border)",
+                    color: "white", fontSize: "0.9rem"
+                  }}
+                />
+                <button onClick={() => handleAdminAction("add", adminEmail)}
+                  className="btn-primary" style={{ padding: "0.6rem 1rem", whiteSpace: "nowrap" }}>
+                  추가
+                </button>
+              </div>
+            </div>
+
+            {/* 메시지 */}
+            {adminMsg && (
+              <div style={{ marginBottom: "1rem", padding: "0.6rem 0.8rem", borderRadius: "8px",
+                background: adminMsg.startsWith("✅") ? "rgba(16,185,129,0.1)" : "rgba(239,68,68,0.1)",
+                border: adminMsg.startsWith("✅") ? "1px solid rgba(16,185,129,0.3)" : "1px solid rgba(239,68,68,0.3)",
+                color: adminMsg.startsWith("✅") ? "var(--brand-primary)" : "#fca5a5",
+                fontSize: "0.85rem"
+              }}>{adminMsg}</div>
+            )}
+
+            {/* 현재 관리자 목록 */}
+            <div>
+              <label style={{ fontSize: "0.8rem", color: "var(--text-muted)", display: "block", marginBottom: "0.5rem" }}>전체 관리자 ({adminList.length}명)</label>
+              {adminList.map((a) => (
+                <div key={a.email} style={{
+                  display: "flex", justifyContent: "space-between", alignItems: "center",
+                  padding: "0.5rem 0.75rem", borderRadius: "8px", marginBottom: "0.35rem",
+                  background: "rgba(255,255,255,0.05)", border: "1px solid var(--surface-border)"
+                }}>
+                  <span style={{ fontSize: "0.875rem" }}>{a.email}</span>
+                  <button onClick={() => handleAdminAction("remove", a.email)}
+                    style={{ fontSize: "0.75rem", color: "#f87171", cursor: "pointer",
+                      background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)",
+                      borderRadius: "6px", padding: "0.2rem 0.5rem" }}>
+                    해제
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <button onClick={() => setShowAdminModal(false)}
+              style={{ marginTop: "1.5rem", width: "100%", padding: "0.6rem",
+                borderRadius: "8px", background: "rgba(255,255,255,0.05)",
+                border: "1px solid var(--surface-border)", color: "var(--text-secondary)",
+                cursor: "pointer" }}>
+              닫기
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 수집 결과 메시지 */}
+      {collectMsg && (
+        <div style={{ marginBottom: "1rem", padding: "0.75rem 1rem", borderRadius: "8px",
+          background: collectMsg.startsWith("✅") ? "rgba(16,185,129,0.1)" : "rgba(239,68,68,0.1)",
+          border: collectMsg.startsWith("✅") ? "1px solid rgba(16,185,129,0.3)" : "1px solid rgba(239,68,68,0.3)",
+          color: collectMsg.startsWith("✅") ? "var(--brand-primary)" : "#fca5a5",
+          fontSize: "0.875rem"
+        }}>
+          {collectMsg}
+        </div>
+      )}
 
       {/* ── 날짜 필터 바 ── */}
       <div style={{ marginBottom: "1rem", padding: "1rem 1.25rem", borderRadius: "12px", background: "rgba(255,255,255,0.03)", border: "1px solid var(--surface-border)" }}>
