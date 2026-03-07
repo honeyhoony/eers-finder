@@ -83,6 +83,8 @@ export default function Dashboard() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [collecting, setCollecting] = useState(false);
   const [collectMsg, setCollectMsg] = useState<string | null>(null);
+  const [showCollectModal, setShowCollectModal] = useState(false);
+  const [collectDate, setCollectDate] = useState(""); // YYYYMMDD, 비우면 오늘
   const [showAdminModal, setShowAdminModal] = useState(false);
   const [adminEmail, setAdminEmail] = useState("");
   const [adminList, setAdminList] = useState<{email: string; name: string | null}[]>([]);
@@ -190,10 +192,15 @@ export default function Dashboard() {
     setCollecting(true);
     setCollectMsg(null);
     try {
-      const res = await fetch("/api/collect", { method: "POST" });
+      const res = await fetch("/api/collect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetDate: collectDate || "" }), // 비우면 오늘 자동
+      });
       const json = await res.json();
       if (res.ok) {
         setCollectMsg("✅ " + json.message);
+        setShowCollectModal(false);
         setTimeout(() => fetchAnnouncements(), 5000);
       } else {
         setCollectMsg("❌ " + json.error);
@@ -243,23 +250,19 @@ export default function Dashboard() {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem", flexWrap: "wrap", gap: "1rem" }}>
         <h1 style={{ fontSize: "2rem", fontWeight: "700" }}>맞춤형 공고 분석 대시보드</h1>
         <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
-          {/* 관리자 전용 버튼 구역 */}
           {isAdmin && (
             <>
               <button
-                onClick={handleCollect}
-                disabled={collecting}
+                onClick={() => { setShowCollectModal(true); setCollectMsg(null); }}
                 style={{
                   padding: "0.5rem 1.1rem", fontSize: "0.875rem", borderRadius: "8px",
-                  background: collecting ? "rgba(255,255,255,0.1)" : "rgba(139,92,246,0.2)",
+                  background: "rgba(139,92,246,0.2)",
                   border: "1px solid rgba(139,92,246,0.5)",
-                  color: collecting ? "var(--text-muted)" : "#c4b5fd",
-                  cursor: collecting ? "wait" : "pointer",
-                  display: "flex", alignItems: "center", gap: "0.4rem",
-                  transition: "all 0.2s",
+                  color: "#c4b5fd", cursor: "pointer",
+                  display: "flex", alignItems: "center", gap: "0.4rem", transition: "all 0.2s",
                 }}
               >
-                {collecting ? "⏳ 수집 중..." : "🔄 데이터 수집"}
+                🔄 데이터 수집 [관리자]
               </button>
               <button
                 onClick={() => { setShowAdminModal(true); loadAdminList(); setAdminMsg(null); }}
@@ -267,21 +270,80 @@ export default function Dashboard() {
                   padding: "0.5rem 1.1rem", fontSize: "0.875rem", borderRadius: "8px",
                   background: "rgba(59,130,246,0.15)",
                   border: "1px solid rgba(59,130,246,0.4)",
-                  color: "#93c5fd",
-                  cursor: "pointer",
-                  display: "flex", alignItems: "center", gap: "0.4rem",
-                  transition: "all 0.2s",
+                  color: "#93c5fd", cursor: "pointer",
+                  display: "flex", alignItems: "center", gap: "0.4rem", transition: "all 0.2s",
                 }}
               >
                 👤 관리자 관리
               </button>
             </>
           )}
-          <button onClick={fetchAnnouncements} className="btn-primary" style={{ padding: "0.5rem 1rem", fontSize: "0.875rem" }}>
-            <Search size={16} /> 최신화
+          <button
+            onClick={fetchAnnouncements}
+            className="btn-primary"
+            title="현재 필터 조건으로 DB에서 공고 목록을 다시 불러옵니다"
+            style={{ padding: "0.5rem 1rem", fontSize: "0.875rem" }}
+          >
+            <Search size={16} /> 필터 적용
           </button>
         </div>
       </div>
+
+      {/* 수집 모달 */}
+      {showCollectModal && (
+        <div style={{
+          position: "fixed", inset: 0, zIndex: 9999,
+          background: "rgba(0,0,0,0.7)", backdropFilter: "blur(4px)",
+          display: "flex", alignItems: "center", justifyContent: "center", padding: "1rem"
+        }} onClick={() => setShowCollectModal(false)}>
+          <div className="glass-panel" style={{ width: "100%", maxWidth: "420px", padding: "2rem" }}
+            onClick={(e) => e.stopPropagation()}>
+            <h2 style={{ fontSize: "1.4rem", fontWeight: "700", marginBottom: "0.5rem" }}>🔄 데이터 수집</h2>
+            <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginBottom: "1.5rem" }}>나라장터 및 K-APT에서 입찰공고를 수집합니다.</p>
+
+            <div style={{ marginBottom: "1.25rem" }}>
+              <label style={{ fontSize: "0.8rem", color: "var(--text-muted)", display: "block", marginBottom: "0.4rem" }}>
+                수집 날짜 <span style={{ color: "var(--brand-primary)" }}>(비워두면 오늘 자동)</span>
+              </label>
+              <input
+                type="date"
+                value={collectDate ? `${collectDate.slice(0,4)}-${collectDate.slice(4,6)}-${collectDate.slice(6,8)}` : ""}
+                onChange={(e) => setCollectDate(e.target.value.replace(/-/g, ""))}
+                style={{
+                  width: "100%", padding: "0.6rem 0.8rem", borderRadius: "8px",
+                  background: "rgba(0,0,0,0.3)", border: "1px solid var(--surface-border)",
+                  color: "white", fontSize: "0.9rem"
+                }}
+              />
+            </div>
+
+            {collectMsg && (
+              <div style={{ marginBottom: "1rem", padding: "0.6rem 0.8rem", borderRadius: "8px",
+                background: collectMsg.startsWith("✅") ? "rgba(16,185,129,0.1)" : "rgba(239,68,68,0.1)",
+                border: collectMsg.startsWith("✅") ? "1px solid rgba(16,185,129,0.3)" : "1px solid rgba(239,68,68,0.3)",
+                color: collectMsg.startsWith("✅") ? "var(--brand-primary)" : "#fca5a5",
+                fontSize: "0.85rem"
+              }}>{collectMsg}</div>
+            )}
+
+            <div style={{ display: "flex", gap: "0.5rem" }}>
+              <button onClick={handleCollect} disabled={collecting}
+                className="btn-primary" style={{ flex: 1, padding: "0.7rem", fontSize: "0.95rem" }}>
+                {collecting ? "⏳ GitHub Actions 실행 중..." : "🔄 수집 시작"}
+              </button>
+              <button onClick={() => setShowCollectModal(false)}
+                style={{ padding: "0.7rem 1rem", borderRadius: "8px",
+                  background: "rgba(255,255,255,0.05)", border: "1px solid var(--surface-border)",
+                  color: "var(--text-secondary)", cursor: "pointer" }}>
+                취소
+              </button>
+            </div>
+            <p style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginTop: "0.75rem", textAlign: "center" }}>
+              수집 시작 후 3~5분 뒤 &apos;필터 적용&apos; 버튼을 누르면 새 데이터가 표시됩니다.
+            </p>
+          </div>
+        </div>
+      )}
       {/* 관리자 모달 */}
       {showAdminModal && (
         <div style={{

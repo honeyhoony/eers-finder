@@ -1,8 +1,21 @@
+"use client";
+
+import { useRouter } from "next/navigation";
+import { createClient } from "@/utils/supabase/client";
+
 export default function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const router = useRouter();
+  const supabase = createClient();
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    router.push("/login");
+  };
+
   return (
     <div className="dashboard-layout" style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
       {/* Header */}
@@ -13,10 +26,13 @@ export default function DashboardLayout({
           </div>
           <span style={{ fontSize: "1.25rem", fontWeight: "700" }}>EERS AI 파인더</span>
         </div>
-        
+
         <nav style={{ display: "flex", gap: "1rem" }}>
-          {/* Add basic navigation items if needed later */}
-          <button className="btn-secondary" style={{ padding: "0.5rem 1rem", fontSize: "0.875rem" }}>
+          <button
+            onClick={handleLogout}
+            className="btn-secondary"
+            style={{ padding: "0.5rem 1rem", fontSize: "0.875rem" }}
+          >
             로그아웃
           </button>
         </nav>

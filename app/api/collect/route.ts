@@ -1,7 +1,7 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 
-export async function POST() {
+export async function POST(request: NextRequest) {
   // 1. 현재 로그인 사용자 확인
   const supabase = await createClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -32,6 +32,9 @@ export async function POST() {
   }
 
   try {
+    const body = await request.json().catch(() => ({}));
+    const targetDate = body?.targetDate || "";
+
     const res = await fetch(
       `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/actions/workflows/${WORKFLOW_ID}/dispatches`,
       {
@@ -42,7 +45,10 @@ export async function POST() {
           "X-GitHub-Api-Version": "2022-11-28",
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ ref: "main" }),
+        body: JSON.stringify({
+          ref: "main",
+          inputs: { target_date: targetDate }, // 비어있으면 Actions에서 오늘 자동
+        }),
       }
     );
 
