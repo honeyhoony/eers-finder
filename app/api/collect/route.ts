@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 
+async function getGithubToken(supabase: any): Promise<string> {
+  const fromEnv = process.env.GITHUB_PAT_TOKEN || "";
+  try {
+    const { data } = await supabase.from("app_settings").select("value").eq("key", "GITHUB_PAT_TOKEN").single();
+    if (data?.value) return (data.value as string).trim();
+  } catch { /* 무시 */ }
+  return fromEnv.trim();
+}
+
 export async function POST(request: NextRequest) {
   // 1. 현재 로그인 사용자 확인
   const supabase = await createClient();
@@ -22,13 +31,13 @@ export async function POST(request: NextRequest) {
   }
 
   // 3. GitHub Actions workflow_dispatch 이벤트 트리거
-  const GITHUB_TOKEN = process.env.GITHUB_PAT_TOKEN;
+  const GITHUB_TOKEN = await getGithubToken(supabase);
   const GITHUB_OWNER = "honeyhoony";
   const GITHUB_REPO  = "eers-finder";
   const WORKFLOW_ID  = "collect_daily.yml";
 
   if (!GITHUB_TOKEN) {
-    return NextResponse.json({ error: "GitHub 토큰이 서버에 설정되지 않았습니다." }, { status: 500 });
+    return NextResponse.json({ error: "GitHub 토큰이 설정되지 않았습니다. 관리자 콘솔에서 토큰을 설정해주세요." }, { status: 500 });
   }
 
   try {

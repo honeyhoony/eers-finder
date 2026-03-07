@@ -35,6 +35,7 @@ export default function AdminPage() {
   // AI API 설정
   const [geminiKey, setGeminiKey] = useState("");
   const [openaiKey, setOpenaiKey] = useState("");
+  const [githubPat, setGithubPat] = useState("");
   const [savingApi, setSavingApi] = useState(false);
 
   // 알림 설정 폼
@@ -68,6 +69,7 @@ export default function AdminPage() {
           const m = Object.fromEntries(settings.map((s: {key:string;value:string}) => [s.key, s.value]));
           if (m["GEMINI_API_KEY"]) setGeminiKey(m["GEMINI_API_KEY"]);
           if (m["OPENAI_API_KEY"])  setOpenaiKey(m["OPENAI_API_KEY"]);
+          if (m["GITHUB_PAT_TOKEN"]) setGithubPat(m["GITHUB_PAT_TOKEN"]);
         }
       } catch { /* app_settings 없으면 무시 */ }
 
@@ -364,8 +366,24 @@ export default function AdminPage() {
               </div>
             </div>
 
+            {/* GitHub PAT */}
+            <div style={{ marginBottom: "1.25rem" }}>
+              <label style={{ fontSize: "0.8rem", color: "#10b981", fontWeight: 700, display: "block", marginBottom: "0.4rem" }}>
+                🐙 GitHub PAT Token (데이터 수집용, 필수)
+              </label>
+              <div style={{ display: "flex", gap: "0.5rem" }}>
+                <input type="password" value={githubPat} onChange={e => setGithubPat(e.target.value)}
+                  placeholder="ghp_..."
+                  style={{ flex: 1, padding: "0.65rem 0.8rem", borderRadius: "8px", background: "rgba(0,0,0,0.3)", border: "1px solid rgba(16,185,129,0.3)", color: "white", fontSize: "0.875rem", fontFamily: "monospace" }} />
+                <button onClick={() => saveApiKey("GITHUB_PAT_TOKEN", githubPat)} disabled={savingApi || !githubPat}
+                  className="btn-primary" style={{ padding: "0.65rem 1rem", fontSize: "0.85rem", borderRadius: "8px", whiteSpace: "nowrap" }}>
+                  💾 저장
+                </button>
+              </div>
+            </div>
+
             <div style={{ padding: "0.75rem 1rem", borderRadius: "8px", background: "rgba(16,185,129,0.08)", border: "1px solid rgba(16,185,129,0.2)", fontSize: "0.82rem", color: "var(--text-secondary)" }}>
-              💡 현재 설정된 키: {geminiKey ? `Gemini ✅ (${geminiKey.slice(0,8)}...)` : "Gemini ❌"} &nbsp;|&nbsp; {openaiKey ? `OpenAI ✅ (${openaiKey.slice(0,8)}...)` : "OpenAI ❌"}
+              💡 현재 설정된 키: {geminiKey ? `Gemini ✅` : "Gemini ❌"} &nbsp;|&nbsp; {openaiKey ? `OpenAI ✅` : "OpenAI ❌"} &nbsp;|&nbsp; {githubPat ? `GitHub PAT ✅` : "GitHub PAT ❌"}
             </div>
           </div>
         </motion.div>
