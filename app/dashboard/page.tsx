@@ -280,11 +280,11 @@ export default function Dashboard() {
           )}
           <button
             onClick={fetchAnnouncements}
-            className="btn-primary"
+            className="btn-secondary"
             title="현재 필터 조건으로 DB에서 공고 목록을 다시 불러옵니다"
-            style={{ padding: "0.5rem 1rem", fontSize: "0.875rem" }}
+            style={{ padding: "0.5rem 1rem", fontSize: "0.875rem", display: "flex", alignItems: "center", gap: "0.4rem" }}
           >
-            <Search size={16} /> 필터 적용
+            <Search size={16} /> 새로고침
           </button>
         </div>
       </div>
@@ -453,13 +453,13 @@ export default function Dashboard() {
 
           {datePreset === "직접선택" && (
             <>
-              <input type="date" value={customFrom ? `${customFrom.slice(0,4)}-${customFrom.slice(4,6)}-${customFrom.slice(6,8)}` : ""}
-                onChange={(e) => setCustomFrom(e.target.value.replace(/-/g, ""))}
+              <input type="date" value={customFrom}
+                onChange={(e) => setCustomFrom(e.target.value)}
                 style={{ padding: "0.35rem 0.6rem", borderRadius: "8px", background: "rgba(0,0,0,0.3)", border: "1px solid var(--surface-border)", color: "white", fontSize: "0.85rem" }}
               />
               <span style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>~</span>
-              <input type="date" value={customTo ? `${customTo.slice(0,4)}-${customTo.slice(4,6)}-${customTo.slice(6,8)}` : ""}
-                onChange={(e) => setCustomTo(e.target.value.replace(/-/g, ""))}
+              <input type="date" value={customTo}
+                onChange={(e) => setCustomTo(e.target.value)}
                 style={{ padding: "0.35rem 0.6rem", borderRadius: "8px", background: "rgba(0,0,0,0.3)", border: "1px solid var(--surface-border)", color: "white", fontSize: "0.85rem" }}
               />
             </>
@@ -471,68 +471,64 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* ── 필터 바 ── */}
-      <div style={{ marginBottom: "2rem", padding: "1.25rem", borderRadius: "12px", background: "rgba(255,255,255,0.04)", border: "1px solid var(--surface-border)" }}>
+      {/* ── 본부/사업소 필터 바 ── */}
+      <div style={{ marginBottom: "1.5rem", padding: "1.25rem", borderRadius: "12px", background: "rgba(255,255,255,0.04)", border: "1px solid var(--surface-border)" }}>
         {/* 1단계: 본부 선택 */}
         <div style={{ marginBottom: "0.75rem" }}>
           <label style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 600, display: "block", marginBottom: "0.5rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>① 본부 선택</label>
           <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
             {Object.keys(HQ_OFFICE_MAP).map((hq) => (
-              <button
-                key={hq}
-                onClick={() => handleHqChange(hq)}
-                style={{
-                  padding: "0.4rem 0.9rem",
-                  borderRadius: "999px",
-                  fontSize: "0.82rem",
-                  fontWeight: 600,
-                  cursor: "pointer",
-                  transition: "all 0.15s",
+              <button key={hq} onClick={() => handleHqChange(hq)}
+                style={{ padding: "0.4rem 0.9rem", borderRadius: "999px", fontSize: "0.82rem", fontWeight: 600, cursor: "pointer", transition: "all 0.15s",
                   background: selectedHq === hq ? "var(--brand-primary)" : "rgba(255,255,255,0.07)",
                   color: selectedHq === hq ? "white" : "var(--text-secondary)",
                   border: selectedHq === hq ? "1px solid var(--brand-primary)" : "1px solid var(--surface-border)",
-                }}
-              >
+                }}>
                 {hq}
               </button>
             ))}
           </div>
         </div>
 
-        {/* 2단계: 사업소 선택 (본부 선택 시에만 표시) */}
+        {/* 2단계: 사업소 선택 */}
         {selectedHq !== "전국" && officeList.length > 0 && (
           <div style={{ borderTop: "1px solid var(--surface-border)", paddingTop: "0.75rem", marginTop: "0.25rem" }}>
             <label style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 600, display: "block", marginBottom: "0.5rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-              ② 사업소 선택
-              <span style={{ marginLeft: "0.5rem", color: "var(--brand-primary)", fontWeight: 400, textTransform: "none" }}>— {selectedHq}</span>
+              ② 사업소 선택 <span style={{ marginLeft: "0.5rem", color: "var(--brand-primary)", fontWeight: 400, textTransform: "none" }}>— {selectedHq}</span>
             </label>
             <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap" }}>
               {["전체", ...officeList].map((office) => (
-                <button
-                  key={office}
-                  onClick={() => setSelectedOffice(office)}
-                  style={{
-                    padding: "0.3rem 0.7rem",
-                    borderRadius: "999px",
-                    fontSize: "0.78rem",
-                    fontWeight: 600,
-                    cursor: "pointer",
-                    transition: "all 0.15s",
-                    background: selectedOffice === office
-                      ? "rgba(16,185,129,0.2)"
-                      : "rgba(255,255,255,0.05)",
+                <button key={office} onClick={() => setSelectedOffice(office)}
+                  style={{ padding: "0.3rem 0.7rem", borderRadius: "999px", fontSize: "0.78rem", fontWeight: 600, cursor: "pointer", transition: "all 0.15s",
+                    background: selectedOffice === office ? "rgba(16,185,129,0.2)" : "rgba(255,255,255,0.05)",
                     color: selectedOffice === office ? "var(--brand-primary)" : "var(--text-muted)",
-                    border: selectedOffice === office
-                      ? "1px solid rgba(16,185,129,0.5)"
-                      : "1px solid var(--surface-border)",
-                  }}
-                >
+                    border: selectedOffice === office ? "1px solid rgba(16,185,129,0.5)" : "1px solid var(--surface-border)",
+                  }}>
                   {office}
                 </button>
               ))}
             </div>
           </div>
         )}
+
+        {/* 필터 적용 버튼 + 현재 조건 요약 */}
+        <div style={{ borderTop: "1px solid var(--surface-border)", paddingTop: "0.75rem", marginTop: "0.75rem", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.5rem" }}>
+          <div style={{ fontSize: "0.82rem", color: "var(--text-muted)", display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
+            <span style={{ color: "var(--text-secondary)", fontWeight: 600 }}>현재 필터:</span>
+            <span style={{ background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.2)", borderRadius: "6px", padding: "0.15rem 0.5rem", color: "var(--brand-primary)" }}>
+              평부 {selectedHq} {selectedHq !== "전국" && selectedOffice !== "전체" ? `> ${selectedOffice}` : ""}
+            </span>
+            {dateFrom && (
+              <span style={{ background: "rgba(59,130,246,0.1)", border: "1px solid rgba(59,130,246,0.2)", borderRadius: "6px", padding: "0.15rem 0.5rem", color: "#60a5fa" }}>
+                📅 {toDisplay(dateFrom)} ~ {toDisplay(dateTo)}
+              </span>
+            )}
+          </div>
+          <button onClick={fetchAnnouncements} className="btn-primary"
+            style={{ padding: "0.5rem 1.25rem", fontSize: "0.88rem", display: "flex", alignItems: "center", gap: "0.4rem" }}>
+            <Search size={15} /> 조건으로 조회
+          </button>
+        </div>
       </div>
 
       {/* ── 결과 영역 ── */}
