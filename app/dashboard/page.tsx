@@ -513,91 +513,8 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* ── 검색바 + 간편 키워드 버튼 ── */}
-      <div style={{ marginBottom: "1rem", padding: "1rem 1.25rem", borderRadius: "12px", background: "rgba(255,255,255,0.04)", border: "1px solid var(--surface-border)" }}>
-        <label style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 600, display: "block", marginBottom: "0.5rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-          <Search size={12} style={{ display: "inline", marginRight: "4px" }} /> 키워드 검색
-        </label>
-        {/* 텍스트 검색창 */}
-        <div style={{ position: "relative", marginBottom: "0.65rem" }}>
-          <Search size={15} style={{ position: "absolute", left: "0.9rem", top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)", pointerEvents: "none" }} />
-          <input
-            value={searchText}
-            onChange={e => setSearchText(e.target.value)}
-            placeholder="공고명·기관명·품목 검색 (AND: &, 제외: -, 예: led & 교체)"
-            style={{ width: "100%", padding: "0.55rem 2.5rem 0.55rem 2.4rem", borderRadius: "8px", background: "rgba(0,0,0,0.25)", border: "1px solid var(--surface-border)", color: "white", fontSize: "0.875rem", boxSizing: "border-box" }}
-          />
-          {searchText && (
-            <button onClick={() => setSearchText("")}
-              style={{ position: "absolute", right: "0.7rem", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)" }}>
-              <X size={14} />
-            </button>
-          )}
-        </div>
-        {/* 간편 키워드 버튼 */}
-        <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
-          <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", alignSelf: "center", marginRight: "0.15rem" }}>EERS 품목:</span>
-          {QUICK_KEYWORDS.map(kw => {
-            const cat = EERS_CATEGORY[kw];
-            const active = searchText.toLowerCase() === kw.toLowerCase();
-            return (
-              <button key={kw}
-                onClick={() => setSearchText(active ? "" : kw)}
-                style={{ padding: "0.25rem 0.7rem", borderRadius: "999px", fontSize: "0.8rem", cursor: "pointer", transition: "all 0.15s",
-                  background: active ? cat?.bg : "rgba(255,255,255,0.05)",
-                  color: active ? cat?.color : "var(--text-muted)",
-                  border: active ? `1px solid ${cat?.color}` : "1px solid var(--surface-border)",
-                  fontWeight: active ? "700" : "400" }}>
-                {cat?.emoji} {kw}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* ── 날짜 필터 바 ── */}
-      <div style={{ marginBottom: "1rem", padding: "1rem 1.25rem", borderRadius: "12px", background: "rgba(255,255,255,0.03)", border: "1px solid var(--surface-border)" }}>
-        <label style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 600, display: "block", marginBottom: "0.5rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-          <Calendar size={12} style={{ display: "inline", marginRight: "4px" }} />
-          공고 기간 필터
-        </label>
-        <div style={{ display: "flex", gap: "0.4rem", alignItems: "center", flexWrap: "wrap" }}>
-          {(["\uc624\ub298", "\uc774\ubc88\uc8fc", "\uc774\ubc88\ub2ec", "\uc9c1\uc811\uc120\ud0dd"] as DatePreset[]).map((p) => (
-            <button
-              key={p}
-              onClick={() => setDatePreset(p)}
-              style={{
-                padding: "0.35rem 0.9rem", borderRadius: "999px", fontSize: "0.82rem", fontWeight: 600, cursor: "pointer",
-                background: datePreset === p ? "var(--brand-secondary)" : "rgba(255,255,255,0.07)",
-                color: datePreset === p ? "white" : "var(--text-secondary)",
-                border: datePreset === p ? "1px solid var(--brand-secondary)" : "1px solid var(--surface-border)",
-                transition: "all 0.15s",
-              }}
-            >{p}</button>
-          ))}
-
-          {datePreset === "직접선택" && (
-            <>
-              <input type="date" value={customFrom}
-                onChange={(e) => setCustomFrom(e.target.value)}
-                style={{ padding: "0.35rem 0.6rem", borderRadius: "8px", background: "rgba(0,0,0,0.3)", border: "1px solid var(--surface-border)", color: "white", fontSize: "0.85rem" }}
-              />
-              <span style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>~</span>
-              <input type="date" value={customTo}
-                onChange={(e) => setCustomTo(e.target.value)}
-                style={{ padding: "0.35rem 0.6rem", borderRadius: "8px", background: "rgba(0,0,0,0.3)", border: "1px solid var(--surface-border)", color: "white", fontSize: "0.85rem" }}
-              />
-            </>
-          )}
-
-          {dateFrom && <span style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginLeft: "0.25rem" }}>
-            {toDisplay(dateFrom)} ~ {toDisplay(dateTo)}
-          </span>}
-        </div>
-      </div>
-
-      {/* ── 본부/사업소 필터 바 ── */}
-      <div style={{ marginBottom: "1.5rem", padding: "1.25rem", borderRadius: "12px", background: "rgba(255,255,255,0.04)", border: "1px solid var(--surface-border)" }}>
+      {/* ── 1. 본부/사업소 필터 바 ── */}
+      <div style={{ marginBottom: "1rem", padding: "1.25rem", borderRadius: "12px", background: "rgba(255,255,255,0.04)", border: "1px solid var(--surface-border)" }}>
         {/* 1단계: 본부 선택 */}
         <div style={{ marginBottom: "0.75rem" }}>
           <label style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 600, display: "block", marginBottom: "0.5rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>① 본부 선택</label>
@@ -635,9 +552,92 @@ export default function Dashboard() {
             </div>
           </div>
         )}
+      </div>
 
+      {/* ── 2. 날짜 필터 바 ── */}
+      <div style={{ marginBottom: "1rem", padding: "1rem 1.25rem", borderRadius: "12px", background: "rgba(255,255,255,0.03)", border: "1px solid var(--surface-border)" }}>
+        <label style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 600, display: "block", marginBottom: "0.5rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+          <Calendar size={12} style={{ display: "inline", marginRight: "4px" }} />
+          공고 기간 필터
+        </label>
+        <div style={{ display: "flex", gap: "0.4rem", alignItems: "center", flexWrap: "wrap" }}>
+          {(["오늘", "이번주", "이번달", "직접선택"] as DatePreset[]).map((p) => (
+            <button
+              key={p}
+              onClick={() => setDatePreset(p)}
+              style={{
+                padding: "0.35rem 0.9rem", borderRadius: "999px", fontSize: "0.82rem", fontWeight: 600, cursor: "pointer",
+                background: datePreset === p ? "var(--brand-secondary)" : "rgba(255,255,255,0.07)",
+                color: datePreset === p ? "white" : "var(--text-secondary)",
+                border: datePreset === p ? "1px solid var(--brand-secondary)" : "1px solid var(--surface-border)",
+                transition: "all 0.15s",
+              }}
+            >{p}</button>
+          ))}
+
+          {datePreset === "직접선택" && (
+            <>
+              <input type="date" value={customFrom}
+                onChange={(e) => setCustomFrom(e.target.value)}
+                style={{ padding: "0.35rem 0.6rem", borderRadius: "8px", background: "rgba(0,0,0,0.3)", border: "1px solid var(--surface-border)", color: "white", fontSize: "0.85rem" }}
+              />
+              <span style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>~</span>
+              <input type="date" value={customTo}
+                onChange={(e) => setCustomTo(e.target.value)}
+                style={{ padding: "0.35rem 0.6rem", borderRadius: "8px", background: "rgba(0,0,0,0.3)", border: "1px solid var(--surface-border)", color: "white", fontSize: "0.85rem" }}
+              />
+            </>
+          )}
+
+          {dateFrom && <span style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginLeft: "0.25rem" }}>
+            {toDisplay(dateFrom)} ~ {toDisplay(dateTo)}
+          </span>}
+        </div>
+      </div>
+
+      {/* ── 3. 검색바 + 간편 키워드 버튼 ── */}
+      <div style={{ marginBottom: "1.5rem", padding: "1rem 1.25rem", borderRadius: "12px", background: "rgba(255,255,255,0.04)", border: "1px solid var(--surface-border)" }}>
+        <label style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 600, display: "block", marginBottom: "0.5rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+          <Search size={12} style={{ display: "inline", marginRight: "4px" }} /> 키워드 검색
+        </label>
+        {/* 텍스트 검색창 */}
+        <div style={{ position: "relative", marginBottom: "0.65rem" }}>
+          <Search size={15} style={{ position: "absolute", left: "0.9rem", top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)", pointerEvents: "none" }} />
+          <input
+            value={searchText}
+            onChange={e => setSearchText(e.target.value)}
+            placeholder="공고명·기관명·품목 검색 (AND: &, 제외: -, 예: led & 교체)"
+            style={{ width: "100%", padding: "0.55rem 2.5rem 0.55rem 2.4rem", borderRadius: "8px", background: "rgba(0,0,0,0.25)", border: "1px solid var(--surface-border)", color: "white", fontSize: "0.875rem", boxSizing: "border-box" }}
+          />
+          {searchText && (
+            <button onClick={() => setSearchText("")}
+              style={{ position: "absolute", right: "0.7rem", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)" }}>
+              <X size={14} />
+            </button>
+          )}
+        </div>
+        {/* 간편 키워드 버튼 */}
+        <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap", marginBottom: "0.75rem" }}>
+          <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", alignSelf: "center", marginRight: "0.15rem" }}>EERS 품목:</span>
+          {QUICK_KEYWORDS.map(kw => {
+            const cat = EERS_CATEGORY[kw];
+            const active = searchText.toLowerCase() === kw.toLowerCase();
+            return (
+              <button key={kw}
+                onClick={() => setSearchText(active ? "" : kw)}
+                style={{ padding: "0.25rem 0.7rem", borderRadius: "999px", fontSize: "0.8rem", cursor: "pointer", transition: "all 0.15s",
+                  background: active ? cat?.bg : "rgba(255,255,255,0.05)",
+                  color: active ? cat?.color : "var(--text-muted)",
+                  border: active ? `1px solid ${cat?.color}` : "1px solid var(--surface-border)",
+                  fontWeight: active ? "700" : "400" }}>
+                {cat?.emoji} {kw}
+              </button>
+            );
+          })}
+        </div>
+        
         {/* 필터 적용 버튼 + 현재 조건 요약 */}
-        <div style={{ borderTop: "1px solid var(--surface-border)", paddingTop: "0.75rem", marginTop: "0.75rem", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.5rem" }}>
+        <div style={{ borderTop: "1px solid var(--surface-border)", paddingTop: "0.75rem", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.5rem" }}>
           <div style={{ fontSize: "0.82rem", color: "var(--text-muted)", display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
             <span style={{ color: "var(--text-secondary)", fontWeight: 600 }}>현재 필터:</span>
             <span style={{ background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.2)", borderRadius: "6px", padding: "0.15rem 0.5rem", color: "var(--brand-primary)" }}>
@@ -655,7 +655,6 @@ export default function Dashboard() {
           </button>
         </div>
       </div>
-
       {/* ── 결과 영역 ── */}
       {loading ? (
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "400px", color: "var(--text-secondary)" }}>

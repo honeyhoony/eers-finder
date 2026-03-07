@@ -37,6 +37,23 @@ type Notice = {
   ai_call_tips: string | null;
 };
 
+const DEVICE_KEYWORDS = [
+  "led", "엘이디", "발광다이오드", "조명", "가로등", "보안등", "터널등", "스마트led", "스마트LED", "LED", "스마트 LED", "스마트 led",
+  "모터", "전동기", "펌프", "블로워", "팬",
+  "히트펌프", "냉동기", "터보압축기", "김건조기",
+  "변압기", "트랜스", "인버터", "인버터 제어형",
+  "공기압축기", "사출성형기", "에어드라이어", "pcm 에어드라이어",
+  "승강기", "엘리베이터"
+];
+
+function findExtractedKeywords(projectName: string) {
+  if (!projectName) return "키워드 없음";
+  const name = projectName.toLowerCase();
+  const found = DEVICE_KEYWORDS.filter(kw => name.includes(kw.toLowerCase()));
+  if (found.length === 0) return "키워드 없음 (기타/물품)";
+  return Array.from(new Set(found)).join(", ");
+}
+
 // (물품) → (고효율 기기) 치환
 function fmtStage(stage: string | null) {
   if (!stage) return null;
@@ -342,7 +359,7 @@ export default function DetailPage() {
           <div>
             <InfoRow icon={<Building2 size={14} />} label="기관명" value={notice.client} copyable />
             <InfoRow icon={<MapPin size={14} />} label="주소" value={notice.address} copyable />
-            <InfoRow icon={<Tag size={14} />} label="EERS 품목 키워드" value={notice.biz_type} />
+            <InfoRow icon={<Tag size={14} />} label="추출된 관련 키워드" value={findExtractedKeywords(notice.project_name)} />
             <InfoRow icon={<Calendar size={14} />} label="공고일" value={notice.notice_date} />
             <InfoRow icon={<DollarSign size={14} />} label="추정가격" value={fmtAmount(notice.amount)} />
           </div>
