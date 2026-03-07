@@ -28,6 +28,10 @@ export default function DashboardLayout({
         </div>
 
         <nav style={{ display: "flex", gap: "1rem" }}>
+          <a href="/dashboard/profile"
+            style={{ padding: "0.5rem 1rem", fontSize: "0.875rem", borderRadius: "8px", background: "rgba(255,255,255,0.05)", border: "1px solid var(--surface-border)", color: "var(--text-secondary)", textDecoration: "none", display: "flex", alignItems: "center", gap: "0.4rem" }}>
+            ⭐ 내 설정
+          </a>
           <button
             onClick={handleLogout}
             className="btn-secondary"

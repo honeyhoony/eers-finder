@@ -147,6 +147,9 @@ export default function DetailPage() {
   const [showMail, setShowMail] = useState(false);
   const [showCall, setShowCall] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analyzeMsg, setAnalyzeMsg] = useState<string | null>(null);
+  const [aiResult, setAiResult] = useState<{score: number; reason: string; tips: string} | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -169,6 +172,38 @@ export default function DetailPage() {
     navigator.clipboard.writeText(text);
     setCopied(label);
     setTimeout(() => setCopied(null), 2000);
+  };
+
+  // AI 시방서 분석
+  const handleAnalyze = async () => {
+    if (!notice) return;
+    setAnalyzing(true);
+    setAnalyzeMsg(null);
+    try {
+      const res = await fetch("/api/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ noticeId: notice.id }),
+      });
+      const json = await res.json();
+      if (res.ok) {
+        setAiResult({ score: json.score, reason: json.reason, tips: json.tips });
+        // notice 상태도 업데이트
+        setNotice(prev => prev ? {
+          ...prev,
+          ai_suitability_score: json.score,
+          ai_suitability_reason: json.reason,
+          ai_call_tips: json.tips,
+        } : prev);
+        setAnalyzeMsg("✅ AI 분석 완료! 아래에서 결과를 확인하세요.");
+      } else {
+        setAnalyzeMsg("❌ " + json.error);
+      }
+    } catch {
+      setAnalyzeMsg("❌ AI 호출 중 오류가 발생했습니다.");
+    } finally {
+      setAnalyzing(false);
+    }
   };
 
   if (loading) return (
@@ -332,16 +367,53 @@ export default function DetailPage() {
         </motion.div>
       </div>
 
-      {/* AI 분석 */}
-      {notice.ai_suitability_reason && (
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
-          className="glass-panel" style={{ padding: "1.5rem", marginBottom: "1.5rem", borderColor: "rgba(16,185,129,0.3)" }}>
-          <h3 style={{ fontSize: "1rem", fontWeight: "700", marginBottom: "1rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
-            <CheckCircle size={18} color="var(--brand-primary)" /> AI 공고문 분석 결과
+      {/* AI 시방서 분석 */}
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
+        className="glass-panel" style={{ padding: "1.5rem", marginBottom: "1.5rem", borderColor: "rgba(16,185,129,0.3)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem", flexWrap: "wrap", gap: "0.5rem" }}>
+          <h3 style={{ fontSize: "1rem", fontWeight: "700", display: "flex", alignItems: "center", gap: "0.5rem", margin: 0 }}>
+            <CheckCircle size={18} color="var(--brand-primary)" /> AI 시방서 분석
           </h3>
-          <p style={{ fontSize: "0.95rem", lineHeight: 1.8, color: "var(--text-secondary)", whiteSpace: "pre-wrap" }}>{notice.ai_suitability_reason}</p>
-        </motion.div>
-      )}
+          <button onClick={handleAnalyze} disabled={analyzing}
+            style={{ padding: "0.5rem 1rem", borderRadius: "8px", fontSize: "0.85rem",
+              background: analyzing ? "rgba(255,255,255,0.05)" : "rgba(16,185,129,0.15)",
+              border: "1px solid rgba(16,185,129,0.4)", color: analyzing ? "var(--text-muted)" : "var(--brand-primary)",
+              cursor: analyzing ? "wait" : "pointer", display: "flex", alignItems: "center", gap: "0.4rem" }}>
+            {analyzing ? "⏳ GPT 분석 중..." : (notice.ai_suitability_reason ? "🔄 다시 분석" : "🤖 AI 분석 시작")}
+          </button>
+        </div>
+
+        {analyzeMsg && (
+          <div style={{ marginBottom: "1rem", padding: "0.6rem 0.8rem", borderRadius: "8px",
+            background: analyzeMsg.startsWith("✅") ? "rgba(16,185,129,0.1)" : "rgba(239,68,68,0.1)",
+            border: analyzeMsg.startsWith("✅") ? "1px solid rgba(16,185,129,0.3)" : "1px solid rgba(239,68,68,0.3)",
+            color: analyzeMsg.startsWith("✅") ? "var(--brand-primary)" : "#fca5a5",
+            fontSize: "0.85rem" }}>{analyzeMsg}</div>
+        )}
+
+        {notice.ai_suitability_reason ? (
+          <div>
+            <div style={{ marginBottom: "1rem" }}>
+              <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginBottom: "0.4rem" }}>📊 분석 결과</div>
+              <p style={{ fontSize: "0.95rem", lineHeight: 1.8, color: "var(--text-secondary)", whiteSpace: "pre-wrap", background: "rgba(0,0,0,0.2)", padding: "1rem", borderRadius: "8px" }}>
+                {notice.ai_suitability_reason}
+              </p>
+            </div>
+            {notice.ai_call_tips && (
+              <div style={{ padding: "0.75rem 1rem", borderRadius: "8px", background: "rgba(139,92,246,0.1)", border: "1px solid rgba(139,92,246,0.3)" }}>
+                <div style={{ fontSize: "0.75rem", color: "#c4b5fd", marginBottom: "0.4rem", fontWeight: "600" }}>📞 영업 멘트 (AI 추천)</div>
+                <p style={{ fontSize: "0.9rem", color: "var(--text-secondary)", margin: 0, lineHeight: 1.7 }}>{notice.ai_call_tips}</p>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div style={{ textAlign: "center", padding: "1.5rem", color: "var(--text-muted)", fontSize: "0.9rem" }}>
+            <div style={{ fontSize: "2rem", marginBottom: "0.5rem" }}>🤖</div>
+            아직 분석이 실행되지 않았습니다.<br />
+            <span style={{ fontSize: "0.8rem" }}>"AI 분석 시작" 버튼을 누르면 gpt-4o-mini가 공고문을 분석합니다.</span>
+          </div>
+        )}
+      </motion.div>
 
       {/* 담당자 플로우 버튼 */}
       <h3 style={{ fontSize: "1rem", fontWeight: "700", marginBottom: "1rem", color: "var(--text-secondary)" }}>📋 담당자 영업 플로우</h3>
