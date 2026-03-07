@@ -1174,9 +1174,8 @@ HARD_DENY_KEYWORDS = [
     "급식", "인쇄", "소프트웨어", "유지보수", "토목", "건축", "조경", "도로", "클라우드", "비품", "사무용품", "디스플레이",
     "사무가구", "비품구매", "문구류", "의료소모품", "식자재", "세탁물", "청소용역", "해운대구", "전광판", "저소득층", "프린트",
     "신축", "횡단보도", "태양광", "벽시계", "모니터", "무드등", "연필꽂이", "교통신호기", "해운대", "OA기기", "취약계층", 
-    # ▼▼▼ [수정] 대구본부 관할 외 경북 지역을 여기에 추가하여 즉시 제외 ▼▼▼
-    "안동", "상주", "문경", "의성", "예천", "영주",
-    "봉화", "청송", "영양", "울진", "구미", "군위", "울릉", "기관명 없음"
+    # 전국 지원을 위해 특정 경북 지역을 강제 차단하지 않고, 기관명 없음만 차단
+    "기관명 없음"
 ]
 
 # 권역 판별(텍스트에 다른 광역권만 분명히 나오면 컷)
@@ -1244,11 +1243,8 @@ def is_relevant_text(*texts: str) -> bool:
     if any(k in s for k in (kw.lower() for kw in HARD_DENY_KEYWORDS)):
         return False
 
-    # 2) 지역 오탐 컷 (다른 권역 + 우리 권역 부재)
-    has_other = any(k in s for k in (kw.lower() for kw in OTHER_REGION_KEYWORDS))
-    has_target = any(k in s for k in (kw.lower() for kw in TARGET_REGION_KEYWORDS))
-    if has_other and not has_target:
-        return False
+    # 2) 이제 전국 지사를 수집하므로 타 지역 거절은 삭제합니다.
+    pass
 
     # 3) 가중치 스코어
     score = 0
@@ -1279,14 +1275,7 @@ def _safe_hint_match(text: str, hint_key: str) -> bool:
         # CLIENT_HINTS에는 '대구 중구청'처럼 넣어두었으므로 여긴 사실상 패스
         return False
 
-    # '대구/경북/포항' 맥락 체크 (과도 컷 방지 위해 완전 하드 조건은 아님. 필요시 강화)
-    has_context = any(k in s for k in ["대구", "경북", "경상북도", "포항", "경주", "경산", "김천", "영천", "칠곡", "성주", "청도", "고령", "영덕"])
-    # 너무 일반적인 기업/기관명 키워드가 생길 경우, 맥락 없으면 컷하도록 추가
-    # if hint_key in ["환경공단", "시설공단", "본사", "본부"] and not has_context:
-    #     return False
-
     return True
-
 
 # =========================
 # 특수권역/지사 후보 정의
@@ -1407,10 +1396,6 @@ def assign_offices_by_address(addr: str) -> List[str]:
     if "영덕군" in addr:  return ["영덕지사"]
 
     # ── 5) 기타 ──
-    if any(g in addr for g in ["동구", "수성구"]):
-        return ["동대구지사"]
-    if any(g in addr for g in ["서구", "남구"]):
-        return ["서대구지사"]
     if "달서구" in addr or "달성군" in addr:
         return []
 

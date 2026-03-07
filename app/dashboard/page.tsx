@@ -600,23 +600,7 @@ export default function Dashboard() {
         <label style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 600, display: "block", marginBottom: "0.5rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>
           <Search size={12} style={{ display: "inline", marginRight: "4px" }} /> 키워드 검색
         </label>
-        {/* 텍스트 검색창 */}
-        <div style={{ position: "relative", marginBottom: "0.65rem" }}>
-          <Search size={15} style={{ position: "absolute", left: "0.9rem", top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)", pointerEvents: "none" }} />
-          <input
-            value={searchText}
-            onChange={e => setSearchText(e.target.value)}
-            placeholder="공고명·기관명·품목 검색 (AND: &, 제외: -, 예: led & 교체)"
-            style={{ width: "100%", padding: "0.55rem 2.5rem 0.55rem 2.4rem", borderRadius: "8px", background: "rgba(0,0,0,0.25)", border: "1px solid var(--surface-border)", color: "white", fontSize: "0.875rem", boxSizing: "border-box" }}
-          />
-          {searchText && (
-            <button onClick={() => setSearchText("")}
-              style={{ position: "absolute", right: "0.7rem", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)" }}>
-              <X size={14} />
-            </button>
-          )}
-        </div>
-        {/* 간편 키워드 버튼 */}
+        {/* 간편 키워드 버튼 (EERS 품목) */}
         <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap", marginBottom: "0.75rem" }}>
           <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", alignSelf: "center", marginRight: "0.15rem" }}>EERS 품목:</span>
           {QUICK_KEYWORDS.map(kw => {
@@ -635,9 +619,33 @@ export default function Dashboard() {
             );
           })}
         </div>
+
+        {/* 텍스트 검색창 + 검색 버튼 */}
+        <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.75rem" }}>
+          <div style={{ position: "relative", flex: 1 }}>
+            <Search size={15} style={{ position: "absolute", left: "0.9rem", top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)", pointerEvents: "none" }} />
+            <input
+              value={searchText}
+              onChange={e => setSearchText(e.target.value)}
+              placeholder="공고명·기관명·품목 검색 (AND: &, 제외: -, 예: led & 교체) - 엔터입력 시 검색"
+              onKeyDown={(e) => { if (e.key === 'Enter') fetchAnnouncements(); }}
+              style={{ width: "100%", padding: "0.55rem 2.5rem 0.55rem 2.4rem", borderRadius: "8px", background: "rgba(0,0,0,0.25)", border: "1px solid var(--surface-border)", color: "white", fontSize: "0.875rem", boxSizing: "border-box" }}
+            />
+            {searchText && (
+              <button onClick={() => setSearchText("")}
+                style={{ position: "absolute", right: "0.7rem", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)" }}>
+                <X size={14} />
+              </button>
+            )}
+          </div>
+          <button onClick={fetchAnnouncements} className="btn-primary"
+            style={{ padding: "0.5rem 1.25rem", fontSize: "0.88rem", display: "flex", alignItems: "center", gap: "0.4rem", flexShrink: 0 }}>
+            <Search size={15} /> 검색
+          </button>
+        </div>
         
-        {/* 필터 적용 버튼 + 현재 조건 요약 */}
-        <div style={{ borderTop: "1px solid var(--surface-border)", paddingTop: "0.75rem", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.5rem" }}>
+        {/* 현재 조건 요약 */}
+        <div style={{ borderTop: "1px solid var(--surface-border)", paddingTop: "0.75rem", display: "flex", alignItems: "center", flexWrap: "wrap", gap: "0.5rem" }}>
           <div style={{ fontSize: "0.82rem", color: "var(--text-muted)", display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
             <span style={{ color: "var(--text-secondary)", fontWeight: 600 }}>현재 필터:</span>
             <span style={{ background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.2)", borderRadius: "6px", padding: "0.15rem 0.5rem", color: "var(--brand-primary)" }}>
@@ -649,10 +657,6 @@ export default function Dashboard() {
               </span>
             )}
           </div>
-          <button onClick={fetchAnnouncements} className="btn-primary"
-            style={{ padding: "0.5rem 1.25rem", fontSize: "0.88rem", display: "flex", alignItems: "center", gap: "0.4rem" }}>
-            <Search size={15} /> 검색
-          </button>
         </div>
       </div>
       {/* ── 결과 영역 ── */}
