@@ -32,11 +32,7 @@ export default function AdminPage() {
   const [myRole, setMyRole] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
 
-  // AI API 설정
-  const [geminiKey, setGeminiKey] = useState("");
-  const [openaiKey, setOpenaiKey] = useState("");
-  const [githubPat, setGithubPat] = useState("");
-  const [savingApi, setSavingApi] = useState(false);
+  // Al API 설정 관련 상태 제거
 
   // 알림 설정 폼
   const [notifType, setNotifType] = useState("email");
@@ -62,36 +58,14 @@ export default function AdminPage() {
       const { data: n } = await supabase.from("notification_settings").select("*").order("id", { ascending: false });
       if (n) setNotifs(n as NotifSetting[]);
 
-      // AI API 키 로드
-      try {
-        const { data: settings } = await supabase.from("app_settings").select("key,value");
-        if (settings) {
-          const m = Object.fromEntries(settings.map((s: {key:string;value:string}) => [s.key, s.value]));
-          if (m["GEMINI_API_KEY"]) setGeminiKey(m["GEMINI_API_KEY"]);
-          if (m["OPENAI_API_KEY"])  setOpenaiKey(m["OPENAI_API_KEY"]);
-          if (m["GITHUB_PAT_TOKEN"]) setGithubPat(m["GITHUB_PAT_TOKEN"]);
-        }
-      } catch { /* app_settings 없으면 무시 */ }
+      // AI API 키 로드 로직 제거
 
       setLoading(false);
     };
     load();
   }, [supabase, router]);
 
-  // AI API 키 저장
-  const saveApiKey = async (keyName: string, value: string) => {
-    if (!value.trim()) return;
-    setSavingApi(true);
-    try {
-      await supabase.from("app_settings").upsert({ key: keyName, value: value.trim(), updated_at: new Date().toISOString() }, { onConflict: "key" });
-      setMsg(`✅ ${keyName} 저장 완료!`);
-    } catch {
-      setMsg(`❌ app_settings 테이블이 없습니다. DB 설정 탭을 먼저 실행하세요.`);
-    } finally {
-      setSavingApi(false);
-      setTimeout(() => setMsg(null), 4000);
-    }
-  };
+  // AI API 키 저장 함수 제거
 
   const setRole = async (userId: string, role: string) => {
     if (myRole !== "S") { setMsg("❌ 최고관리자(S)만 등급을 변경할 수 있습니다."); return; }
@@ -157,10 +131,9 @@ export default function AdminPage() {
         {[
           { key: "users", label: `👥 사용자 (${users.length}명)` },
           { key: "notif", label: "🔔 알림 설정" },
-          { key: "api",   label: "⚙️ AI 키 설정" },
           { key: "db",    label: "🛢️ DB 초기화 SQL" },
         ].map(t => (
-          <button key={t.key} onClick={() => setTab(t.key as "users" | "notif" | "api" | "db")}
+          <button key={t.key} onClick={() => setTab(t.key as "users" | "notif" | "db")}
             style={{ padding: "0.6rem 1.2rem", borderRadius: "10px", fontSize: "0.9rem", fontWeight: tab === t.key ? "700" : "400",
               background: tab === t.key ? "rgba(16,185,129,0.15)" : "rgba(255,255,255,0.05)",
               border: tab === t.key ? "1px solid rgba(16,185,129,0.4)" : "1px solid var(--surface-border)",
@@ -322,72 +295,7 @@ export default function AdminPage() {
         </motion.div>
       )}
 
-      {/* ── AI API 키 설정 탭 ── */}
-      {tab === "api" && (
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
-          <div className="glass-panel" style={{ padding: "2rem", marginBottom: "1.5rem", borderColor: "rgba(251,191,36,0.3)" }}>
-            <h3 style={{ fontSize: "1.1rem", fontWeight: "700", marginBottom: "0.5rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
-              <Key size={20} color="#fbbf24" /> AI API 키 설정 (Supabase 저장)
-            </h3>
-            <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginBottom: "1.5rem", lineHeight: 1.6 }}>
-              Vercel 환경변수가 없어도 여기서 저장하면 AI 분석이 작동합니다.<br/>
-              키는 Supabase <code style={{ background: "rgba(255,255,255,0.1)", padding: "0.1rem 0.3rem", borderRadius: "3px" }}>app_settings</code> 테이블에 저장됩니다.
-            </p>
-
-            {/* Gemini */}
-            <div style={{ marginBottom: "1.25rem" }}>
-              <label style={{ fontSize: "0.8rem", color: "#fbbf24", fontWeight: 700, display: "block", marginBottom: "0.4rem" }}>
-                🤖 Gemini API Key (우선 사용)
-              </label>
-              <div style={{ display: "flex", gap: "0.5rem" }}>
-                <input type="password" value={geminiKey} onChange={e => setGeminiKey(e.target.value)}
-                  placeholder="AIzaSy..."
-                  style={{ flex: 1, padding: "0.65rem 0.8rem", borderRadius: "8px", background: "rgba(0,0,0,0.3)", border: "1px solid rgba(251,191,36,0.3)", color: "white", fontSize: "0.875rem", fontFamily: "monospace" }} />
-                <button onClick={() => saveApiKey("GEMINI_API_KEY", geminiKey)} disabled={savingApi || !geminiKey}
-                  className="btn-primary" style={{ padding: "0.65rem 1rem", fontSize: "0.85rem", borderRadius: "8px", whiteSpace: "nowrap" }}>
-                  💾 저장
-                </button>
-              </div>
-            </div>
-
-            {/* OpenAI */}
-            <div style={{ marginBottom: "1rem" }}>
-              <label style={{ fontSize: "0.8rem", color: "#60a5fa", fontWeight: 700, display: "block", marginBottom: "0.4rem" }}>
-                🧠 OpenAI API Key (Gemini 실패 시 자동 전환)
-              </label>
-              <div style={{ display: "flex", gap: "0.5rem" }}>
-                <input type="password" value={openaiKey} onChange={e => setOpenaiKey(e.target.value)}
-                  placeholder="sk-proj-..."
-                  style={{ flex: 1, padding: "0.65rem 0.8rem", borderRadius: "8px", background: "rgba(0,0,0,0.3)", border: "1px solid rgba(96,165,250,0.3)", color: "white", fontSize: "0.875rem", fontFamily: "monospace" }} />
-                <button onClick={() => saveApiKey("OPENAI_API_KEY", openaiKey)} disabled={savingApi || !openaiKey}
-                  className="btn-primary" style={{ padding: "0.65rem 1rem", fontSize: "0.85rem", borderRadius: "8px", whiteSpace: "nowrap" }}>
-                  💾 저장
-                </button>
-              </div>
-            </div>
-
-            {/* GitHub PAT */}
-            <div style={{ marginBottom: "1.25rem" }}>
-              <label style={{ fontSize: "0.8rem", color: "#10b981", fontWeight: 700, display: "block", marginBottom: "0.4rem" }}>
-                🐙 GitHub PAT Token (데이터 수집용, 필수)
-              </label>
-              <div style={{ display: "flex", gap: "0.5rem" }}>
-                <input type="password" value={githubPat} onChange={e => setGithubPat(e.target.value)}
-                  placeholder="ghp_..."
-                  style={{ flex: 1, padding: "0.65rem 0.8rem", borderRadius: "8px", background: "rgba(0,0,0,0.3)", border: "1px solid rgba(16,185,129,0.3)", color: "white", fontSize: "0.875rem", fontFamily: "monospace" }} />
-                <button onClick={() => saveApiKey("GITHUB_PAT_TOKEN", githubPat)} disabled={savingApi || !githubPat}
-                  className="btn-primary" style={{ padding: "0.65rem 1rem", fontSize: "0.85rem", borderRadius: "8px", whiteSpace: "nowrap" }}>
-                  💾 저장
-                </button>
-              </div>
-            </div>
-
-            <div style={{ padding: "0.75rem 1rem", borderRadius: "8px", background: "rgba(16,185,129,0.08)", border: "1px solid rgba(16,185,129,0.2)", fontSize: "0.82rem", color: "var(--text-secondary)" }}>
-              💡 현재 설정된 키: {geminiKey ? `Gemini ✅` : "Gemini ❌"} &nbsp;|&nbsp; {openaiKey ? `OpenAI ✅` : "OpenAI ❌"} &nbsp;|&nbsp; {githubPat ? `GitHub PAT ✅` : "GitHub PAT ❌"}
-            </div>
-          </div>
-        </motion.div>
-      )}
+      {/* ── AI API 키 설정 탭 제거 ── */}
 
       {/* ── DB 초기화 SQL 탭 ── */}
       {tab === "db" && (
@@ -422,15 +330,6 @@ export default function AdminPage() {
 }
 
 const MIGRATION_SQL = `-- EERS AI Finder DB 초기화 SQL (Supabase SQL Editor에서 실행)
--- app_settings 테이블 (AI API 키 저장)
-CREATE TABLE IF NOT EXISTS public.app_settings (
-  key        text PRIMARY KEY,
-  value      text NOT NULL,
-  updated_at timestamptz DEFAULT now()
-);
-ALTER TABLE public.app_settings ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "S admin only app_settings" ON public.app_settings
-  FOR ALL USING ((SELECT role FROM public.profiles WHERE id = auth.uid()) = 'S');
 
 -- profiles 컬럼 추가
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS phone text;
