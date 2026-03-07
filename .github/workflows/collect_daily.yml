@@ -38,10 +38,9 @@ jobs:
         run: |
           python - << 'PYEOF'
           import os, sys
-          from datetime import datetime
+          from datetime import datetime, timedelta
 
           # ── Python 경로에 파이썬 소스 폴더 추가 ──
-          # eers_finder 폴더가 같은 레포 안에 있다면 sys.path에 추가
           sys.path.insert(0, os.path.join(os.getcwd(), "collector"))
 
           # ── 환경변수로 config 값 덮어쓰기 ──
@@ -59,14 +58,24 @@ jobs:
           )
 
           target = os.environ.get("TARGET_DATE", "").strip()
-          search_date = target if target else datetime.now().strftime("%Y%m%d")
-          print(f"=== EERS 데이터 수집 시작: {search_date} ===")
+          
+          dates_to_run = []
+          if "-" in target:
+              start_str, end_str = target.split("-")
+              start_date = datetime.strptime(start_str, "%Y%m%d")
+              end_date = datetime.strptime(end_str, "%Y%m%d")
+              delta = end_date - start_date
+              dates_to_run = [(start_date + timedelta(days=i)).strftime("%Y%m%d") for i in range(delta.days + 1)]
+          else:
+              dates_to_run = [target if target else datetime.now().strftime("%Y%m%d")]
 
-          fetch_and_process_bid_notices(search_date)
-          fetch_and_process_contracts(search_date)
-          fetch_and_process_delivery_requests(search_date)
-          fetch_and_process_kapt_bids(search_date)
-          fetch_and_process_kapt_bid_results(search_date)
+          for search_date in dates_to_run:
+              print(f"=== EERS 데이터 수집 시작: {search_date} ===")
+              fetch_and_process_bid_notices(search_date)
+              fetch_and_process_contracts(search_date)
+              fetch_and_process_delivery_requests(search_date)
+              fetch_and_process_kapt_bids(search_date)
+              fetch_and_process_kapt_bid_results(search_date)
 
           print("=== 수집 완료! ===")
           PYEOF

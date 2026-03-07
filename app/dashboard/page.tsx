@@ -57,7 +57,7 @@ function matchesSearch(text: string, query: string): boolean {
   return includes.some(t => lower.includes(t.toLowerCase()));
 }
 
-type DatePreset = "오늘" | "이번주" | "이번달" | "직접선택";
+type DatePreset = "오늘" | "이번주" | "이번달" | "전체" | "직접선택";
 
 function getPresetRange(preset: DatePreset): { from: string; to: string } {
   const now = new Date();
@@ -73,6 +73,9 @@ function getPresetRange(preset: DatePreset): { from: string; to: string } {
   if (preset === "이번달") {
     const first = new Date(now.getFullYear(), now.getMonth(), 1);
     return { from: fmt(first), to: fmt(now) };
+  }
+  if (preset === "전체") {
+    return { from: "", to: "" };
   }
   return { from: "", to: "" };
 }
@@ -135,7 +138,8 @@ export default function Dashboard() {
   const [collecting, setCollecting] = useState(false);
   const [collectMsg, setCollectMsg] = useState<string | null>(null);
   const [showCollectModal, setShowCollectModal] = useState(false);
-  const [collectDate, setCollectDate] = useState("");
+  const [collectStart, setCollectStart] = useState("");
+  const [collectEnd, setCollectEnd] = useState("");
   const [showAdminModal, setShowAdminModal] = useState(false);
   const [adminEmail, setAdminEmail] = useState("");
   const [adminList, setAdminList] = useState<{email: string; name: string | null}[]>([]);
@@ -261,7 +265,7 @@ export default function Dashboard() {
       const res = await fetch("/api/collect", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ targetDate: collectDate || "" }), // 비우면 오늘 자동
+        body: JSON.stringify({ targetDate: collectStart && collectEnd ? `${collectStart}-${collectEnd}` : (collectStart || collectEnd || "") }), // 비우면 오늘 자동
       });
       const json = await res.json();
       if (res.ok) {
@@ -386,18 +390,31 @@ export default function Dashboard() {
 
             <div style={{ marginBottom: "1.25rem" }}>
               <label style={{ fontSize: "0.8rem", color: "var(--text-muted)", display: "block", marginBottom: "0.4rem" }}>
-                수집 날짜 <span style={{ color: "var(--brand-primary)" }}>(비워두면 오늘 자동)</span>
+                수집 기간 <span style={{ color: "var(--brand-primary)" }}>(비워두면 오늘 하루 자동)</span>
               </label>
-              <input
-                type="date"
-                value={collectDate ? `${collectDate.slice(0,4)}-${collectDate.slice(4,6)}-${collectDate.slice(6,8)}` : ""}
-                onChange={(e) => setCollectDate(e.target.value.replace(/-/g, ""))}
-                style={{
-                  width: "100%", padding: "0.6rem 0.8rem", borderRadius: "8px",
-                  background: "rgba(0,0,0,0.3)", border: "1px solid var(--surface-border)",
-                  color: "white", fontSize: "0.9rem"
-                }}
-              />
+              <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+                <input
+                  type="date"
+                  value={collectStart ? `${collectStart.slice(0,4)}-${collectStart.slice(4,6)}-${collectStart.slice(6,8)}` : ""}
+                  onChange={(e) => setCollectStart(e.target.value.replace(/-/g, ""))}
+                  style={{
+                    flex: 1, padding: "0.6rem 0.8rem", borderRadius: "8px",
+                    background: "rgba(0,0,0,0.3)", border: "1px solid var(--surface-border)",
+                    color: "white", fontSize: "0.9rem"
+                  }}
+                />
+                <span style={{ color: "var(--text-muted)" }}>~</span>
+                <input
+                  type="date"
+                  value={collectEnd ? `${collectEnd.slice(0,4)}-${collectEnd.slice(4,6)}-${collectEnd.slice(6,8)}` : ""}
+                  onChange={(e) => setCollectEnd(e.target.value.replace(/-/g, ""))}
+                  style={{
+                    flex: 1, padding: "0.6rem 0.8rem", borderRadius: "8px",
+                    background: "rgba(0,0,0,0.3)", border: "1px solid var(--surface-border)",
+                    color: "white", fontSize: "0.9rem"
+                  }}
+                />
+              </div>
             </div>
 
             {collectMsg && (
@@ -561,7 +578,7 @@ export default function Dashboard() {
           공고 기간 필터
         </label>
         <div style={{ display: "flex", gap: "0.4rem", alignItems: "center", flexWrap: "wrap" }}>
-          {(["오늘", "이번주", "이번달", "직접선택"] as DatePreset[]).map((p) => (
+          {(["오늘", "이번주", "이번달", "전체", "직접선택"] as DatePreset[]).map((p) => (
             <button
               key={p}
               onClick={() => setDatePreset(p)}
