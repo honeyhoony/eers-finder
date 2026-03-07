@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { motion } from "framer-motion";
-import { Search, Loader2, FileText, CheckCircle, Database, ArrowRight, Calendar, X } from "lucide-react";
+import { Search, Loader2, FileText, CheckCircle, Database, ArrowRight, Calendar, X, RefreshCw } from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
 import Link from "next/link";
 
@@ -371,7 +371,7 @@ export default function Dashboard() {
             title="현재 필터 조건으로 DB에서 공고 목록을 다시 불러옵니다"
             style={{ padding: "0.5rem 1rem", fontSize: "0.875rem", display: "flex", alignItems: "center", gap: "0.4rem" }}
           >
-            <Search size={16} /> 새로고침
+            <RefreshCw size={16} /> 새로고침
           </button>
         </div>
       </div>
@@ -439,7 +439,7 @@ export default function Dashboard() {
               </button>
             </div>
             <p style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginTop: "0.75rem", textAlign: "center" }}>
-              수집 시작 후 3~5분 뒤 &apos;필터 적용&apos; 버튼을 누르면 새 데이터가 표시됩니다.
+              수집 시작 후 3~5분 뒤 &apos;새로고침&apos; 버튼을 누르면 새 데이터가 표시됩니다.
             </p>
           </div>
         </div>
@@ -617,9 +617,9 @@ export default function Dashboard() {
         <label style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 600, display: "block", marginBottom: "0.5rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>
           <Search size={12} style={{ display: "inline", marginRight: "4px" }} /> 키워드 검색
         </label>
-        {/* 간편 키워드 버튼 (EERS 품목) */}
+        {/* 간편 키워드 버튼 (간편검색) */}
         <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap", marginBottom: "0.75rem" }}>
-          <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", alignSelf: "center", marginRight: "0.15rem" }}>EERS 품목:</span>
+          <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", alignSelf: "center", marginRight: "0.15rem" }}>간편검색:</span>
           {QUICK_KEYWORDS.map(kw => {
             const cat = EERS_CATEGORY[kw];
             const active = searchText.toLowerCase() === kw.toLowerCase();
