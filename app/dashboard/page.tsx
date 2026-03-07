@@ -715,6 +715,11 @@ export default function Dashboard() {
                     <span style={{ fontSize: "0.75rem", fontWeight: "600", padding: "0.25rem 0.5rem", background: item.source_system === "G2B" ? "rgba(59, 130, 246, 0.2)" : "rgba(16, 185, 129, 0.2)", color: item.source_system === "G2B" ? "var(--brand-secondary)" : "var(--brand-primary)", borderRadius: "4px" }}>
                       {item.source_system === "G2B" ? "나라장터" : "K-APT"}
                     </span>
+                    {item.notice_date === fmt(new Date()) && (
+                      <span style={{ fontSize: "0.7rem", fontWeight: "800", padding: "0.15rem 0.4rem", background: "#ef4444", color: "white", borderRadius: "4px", animation: "pulse 2s infinite" }}>
+                        NEW
+                      </span>
+                    )}
                     <span style={{ fontSize: "0.875rem", color: "var(--text-muted)" }}>
                       공고일: {item.notice_date ?? "미상"}
                     </span>
