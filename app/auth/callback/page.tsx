@@ -38,7 +38,10 @@ export default function AuthCallbackPage() {
         }
         
         setStatus("로그인이 완료되었습니다! 대시보드로 이동합니다...");
-        setTimeout(() => router.push("/dashboard"), 800);
+        // PKCE 교환 후 쿠키가 브라우저에 확실히 고착될 수 있도록 강제 지연 후 전체 페이지 리로드
+        setTimeout(() => {
+          window.location.href = "/dashboard";
+        }, 1200);
         return;
       }
 
@@ -63,7 +66,10 @@ export default function AuthCallbackPage() {
             setTimeout(() => router.push("/login"), 5000);
           } else {
             setStatus("인증 완료! 대시보드로 이동합니다...");
-            setTimeout(() => router.push("/dashboard"), 800);
+            // 세션 설정 후 쿠키 저장 시간을 위해 강제 지연 후 전체 페이지 리로드
+            setTimeout(() => {
+              window.location.href = "/dashboard";
+            }, 1200);
           }
           return;
         }
@@ -73,7 +79,7 @@ export default function AuthCallbackPage() {
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
         setStatus("이미 로그인되어 있습니다. 대시보드로 이동합니다...");
-        router.push("/dashboard");
+        window.location.href = "/dashboard";
       } else {
         setStatus("유효한 인증 정보를 찾을 수 없습니다.");
         setErrorDetails("잠시 후 로그인 페이지로 이동합니다.");

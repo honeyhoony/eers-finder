@@ -8,24 +8,25 @@ const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
   auth: { autoRefreshToken: false, persistSession: false }
 });
 
-async function generateAndReturnLink(email: string, metadata: any, req?: NextRequest) {
-  // 1. Supabase에서 세션을 생성할 수 있는 마법의 링크(Magic Link) 생성
-  // 로컬 테스트 환경이 아닌 경우 실제 배포 주소를 강제로 사용하도록 설정
-  const siteUrl = "https://eers-bid-alarm.vercel.app";
+async function generateAndReturnLink(email: string, metadata: any, req: NextRequest) {
+  // 1. 현재 요청이 들어온 오리진(도메인)을 정확히 파악합니다.
+  const origin = req.nextUrl.origin; // 예: http://localhost:3000 또는 https://eers-bid-alarm.vercel.app
+  const redirectUrl = new URL("/auth/callback", origin).toString();
   
-  console.log(`[Auth] Generating link for ${email} with redirectTo: ${siteUrl}/auth/callback`);
+  console.log(`[Auth] Redirect URL set to: ${redirectUrl}`);
 
+  // 2. Supabase 링크 생성 (Magic Link)
   const { data, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
     type: 'magiclink',
     email,
     options: { 
       data: metadata,
-      redirectTo: `${siteUrl}/auth/callback`
+      redirectTo: redirectUrl
     }
   });
 
-  // Supabase link 생성 결과에서 혹시라도 localhost가 포함되어 있으면 강제로 치환합니다.
   let actionLink = "";
+
   if (linkError) {
       // 가입되지 않은 경우 signup 시도 (비밀번호는 랜덤)
       const { data: signupData, error: signupError } = await supabaseAdmin.auth.admin.generateLink({
@@ -34,7 +35,7 @@ async function generateAndReturnLink(email: string, metadata: any, req?: NextReq
           password: Math.random().toString(36).slice(-10) + 'A1!',
           options: { 
               data: metadata,
-              redirectTo: `${siteUrl}/auth/callback`
+              redirectTo: redirectUrl
           }
       });
       if (signupError) throw signupError;
@@ -43,17 +44,6 @@ async function generateAndReturnLink(email: string, metadata: any, req?: NextReq
       actionLink = data.properties.action_link;
   }
 
-  // 핵심: Supabase 엔진이 내부 설정(Site URL) 때문에 redirectTo를 무시하고 localhost를 줄 경우를 대비해 
-  // 모든 localhost와 http를 실제 배포 주소와 https로 강제 변환합니다.
-  actionLink = actionLink
-    .split("http://localhost:3000").join("https://eers-bid-alarm.vercel.app")
-    .split("http%3A%2F%2Flocalhost%3A3000").join("https%3A%2F%2Feers-bid-alarm.vercel.app")
-    .split("localhost:3000").join("eers-bid-alarm.vercel.app");
-
-  // 혹시라도 http만 남아있는 경우 (localhost가 아니더라도) https로 강제 승격
-  if (actionLink.includes("redirect_to=http%3A%2F%2F")) {
-    actionLink = actionLink.replace("redirect_to=http%3A%2F%2F", "redirect_to=https%3A%2F%2F");
-  }
   if (actionLink.includes("redirect_to=http://")) {
     actionLink = actionLink.replace("redirect_to=http://", "redirect_to=https://");
   }
