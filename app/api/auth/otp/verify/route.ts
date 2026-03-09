@@ -43,16 +43,22 @@ async function generateAndReturnLink(email: string, metadata: any, req: NextRequ
   }
 
   // 2. [핵심] 공격적인 주소 보정
-  // 만약 Supabase 설정 때문에 localhost 주소를 포함하고 있다면, 현재 사용자가 접속한 도메인으로 강제 치환
-  if (actionLink.includes("localhost:3000") && !isLocal) {
-    console.log("[Auth] PROD environment: Forcing localhost -> production domain");
-    actionLink = actionLink
-      .replace(/http:\/\/localhost:3000/g, "https://eers-bid-alarm.vercel.app")
-      .replace(/localhost:3000/g, "eers-bid-alarm.vercel.app");
-  } else if (!actionLink.includes("localhost:3000") && isLocal) {
-    console.log("[Auth] LOCAL environment: Forcing production domain -> localhost");
-    const domain = new URL(actionLink).host;
-    actionLink = actionLink.replace(domain, "localhost:3000").replace("https://", "http://");
+  // 어떤 형태로든 localhost:3000이 포함되어 있으면 현재 접속한 도메인으로 강제 치환
+  if (!isLocal) {
+    console.log("[Auth] PROD environment: Forcing extreme URL sanitization");
+    // 1) 모든 형태의 localhost:3000을 배포 주소로 치환
+    actionLink = actionLink.split("localhost:3000").join("eers-bid-alarm.vercel.app");
+    // 2) 모든 http 프로토콜을 https로 강제 승격 (배포 환경은 무조건 https 필요)
+    actionLink = actionLink.split("http://").join("https://");
+    actionLink = actionLink.split("http%3A%2F%2F").join("https%3A%2F%2F");
+  } else {
+    console.log("[Auth] LOCAL environment: Ensuring localhost target");
+    // 로컬 환경인데 배포 주소가 들어있다면 로컬로 치환
+    if (actionLink.includes("eers-bid-alarm.vercel.app")) {
+      actionLink = actionLink
+        .replace(/https:\/\/eers-bid-alarm.vercel.app/g, "http://localhost:3000")
+        .replace(/eers-bid-alarm.vercel.app/g, "localhost:3000");
+    }
   }
 
   console.log(`[Auth] Final actionLink: ${actionLink}`);
