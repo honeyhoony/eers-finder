@@ -21,7 +21,41 @@
   --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 }
 
-/* ── 라이트 모드 ── */
+.dashboard-theme {
+  --bg-gradient: #ffffff; /* 순백색 */
+  --brand-primary: #10b981; /* 포인트 컬러 (최소한) */
+  --brand-primary-glow: rgba(16, 185, 129, 0.1);
+  --brand-secondary: #0f172a; /* 거의 검정에 가까운 네이비 포인트 */
+  --brand-accent: #334155;
+  --text-primary: #111827; /* 진한 검정 */
+  --text-secondary: #374151; /* 진한 회색 */
+  --text-muted: #6b7280; /* 중간 회색 */
+  --surface-bg: #ffffff;
+  --surface-border: #f3f4f6; /* 아주 연한 회색 */
+  --header-bg: rgba(255, 255, 255, 0.95);
+  --card-hover-border: #e5e7eb;
+}
+
+/* 추가적인 흰 바탕 강제 설정 */
+.dashboard-theme body {
+  background: #ffffff !important;
+  color: #111827 !important;
+}
+
+.dashboard-theme .glass-panel {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05); /* 아주 옅은 그림자 */
+  backdrop-filter: none;
+}
+.dashboard-theme .glass-panel:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+  border-color: #d1d5db;
+  transform: translateY(-2px);
+}
+
+
+
 .light-mode {
   --bg-gradient: linear-gradient(135deg, #f0fdf4 0%, #eff6ff 100%);
   --brand-primary: #059669;

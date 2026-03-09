@@ -8,7 +8,7 @@ function getApiKeys(): { gemini: string; openai: string } {
   };
 }
 
-type AIResult = { score: number; reason: string; tips: string };
+type AIResult = { score: number; reason: string; tips: string; keywords: string[] };
 
 // JSON 문자열에서 첫 번째 JSON 객체 추출 (코드블록 등 에러 방지)
 function extractJSON(text: string): Record<string, unknown> {
@@ -48,6 +48,7 @@ async function callGemini(prompt: string, key: string): Promise<AIResult> {
     score:  Math.max(0, Math.min(100, Number(raw.score) || 0)),
     reason: String(raw.reason || "분석 완료"),
     tips:   String(raw.tips   || ""),
+    keywords: Array.isArray(raw.keywords) ? raw.keywords.map(String) : [],
   };
 }
 
@@ -79,6 +80,7 @@ async function callOpenAI(prompt: string, key: string): Promise<AIResult> {
     score:  Math.max(0, Math.min(100, Number(raw.score) || 0)),
     reason: String(raw.reason || "분석 완료"),
     tips:   String(raw.tips   || ""),
+    keywords: Array.isArray(raw.keywords) ? raw.keywords.map(String) : [],
   };
 }
 
@@ -103,7 +105,108 @@ function buildPrompt(n: Record<string, unknown>): string {
 0~49: 단순 유지보수 또는 EERS 무관
 
 [응답 — 반드시 순수 JSON만 출력, 마크다운 금지]
-{"score":<0-100 정수>,"reason":"<200자 이하>","tips":"<담당자에게 전화할 오프닝 멘트 1~2문장>"}`;
+{"score":<0-100 정수>,"reason":"<200자 이하>","tips":"<담당자에게 전화할 오프닝 멘트 1~2문장>","keywords":["<EERS 관련 핵심어 1~3개>"]}
+`;
+}
+
+async function fetchG2BExtra(path: string, params: Record<string, string>) {
+  const serviceKey = process.env.NARA_SERVICE_KEY;
+  if (!serviceKey) return null;
+  const url = new URL(`https://apis.data.go.kr${path}`);
+  url.searchParams.append("ServiceKey", serviceKey);
+  url.searchParams.append("type", "json");
+  url.searchParams.append("numOfRows", "5");
+  url.searchParams.append("pageNo", "1");
+  for (const [k, v] of Object.entries(params)) {
+    if (v) url.searchParams.append(k, v);
+  }
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+    const res = await fetch(url.toString(), { signal: controller.signal });
+    clearTimeout(timeout);
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json?.response?.body?.items || json?.response?.body?.item || null;
+  } catch (e) {
+    console.warn(`[fetchG2BExtra] Error fetching ${path}:`, e);
+    return null;
+  }
+}
+
+async function enrichNoticeContext(notice: Record<string, any>): Promise<string> {
+  let prompt = buildPrompt(notice);
+  const rawStr = notice.raw_data;
+  let raw: Record<string, any> = {};
+  if (rawStr) {
+    try {
+      raw = JSON.parse(rawStr);
+    } catch(e) {}
+  }
+
+  let extraData = "";
+  if (notice.source_system === "G2B") {
+    const dlvrReqNo = raw.dlvrReqNo || raw.reqstNo;
+    const bidNtceNo = raw.bidNtceNo;
+    const prdctIdntNo = raw.prdctIdntNo || raw.itemIdntfcNo;
+    const untyCntrctNo = raw.untyCntrctNo;
+
+    // 1) 납품요구 상세
+    if (dlvrReqNo) {
+      const dlvrDetails = await fetchG2BExtra("/1230000/at/ShoppingMallPrdctInfoService/getDlvrReqDtlInfoList", { dlvrReqNo });
+      if (dlvrDetails) extraData += `\n\n[종합쇼핑몰 납품요구 상세 정보]\n${JSON.stringify(dlvrDetails, null, 2)}`;
+    }
+    
+    // 2) 종합쇼핑몰 품목정보 (물품식별번호 존재 시)
+    if (prdctIdntNo) {
+      const prdctDetails = await fetchG2BExtra("/1230000/at/ShoppingMallPrdctInfoService/getShoppingMallPrdctInfoList", { prdctIdntNo });
+      if (prdctDetails) extraData += `\n\n[종합쇼핑몰 품목 상세 정보]\n${JSON.stringify(prdctDetails, null, 2)}`;
+
+      const masDetails = await fetchG2BExtra("/1230000/at/ShoppingMallPrdctInfoService/getMASCntrctPrdctInfoList", { prdctIdntNo });
+      if (masDetails) extraData += `\n\n[다수공급자계약 품목 상세 정보]\n${JSON.stringify(masDetails, null, 2)}`;
+      
+      const ucntrctDetails = await fetchG2BExtra("/1230000/at/ShoppingMallPrdctInfoService/getUcntrctPrdctInfoList", { prdctIdntNo });
+      if (ucntrctDetails) extraData += `\n\n[일반단가계약 품목 상세 정보]\n${JSON.stringify(ucntrctDetails, null, 2)}`;
+      
+      const thptyDetails = await fetchG2BExtra("/1230000/at/ShoppingMallPrdctInfoService/getThptyUcntrctPrdctInfoList", { prdctIdntNo });
+      if (thptyDetails) extraData += `\n\n[제3자단가계약 품목 상세 정보]\n${JSON.stringify(thptyDetails, null, 2)}`;
+
+    } else if (raw.prdctClsfcNo) {
+      // 품명으로 조회
+      const prdctDetails = await fetchG2BExtra("/1230000/at/ShoppingMallPrdctInfoService/getShoppingMallPrdctInfoList", { prdctClsfcNo: raw.prdctClsfcNo });
+      if (prdctDetails) extraData += `\n\n[종합쇼핑몰 품목 상세 정보]\n${JSON.stringify(prdctDetails, null, 2)}`;
+      
+      const masDetails = await fetchG2BExtra("/1230000/at/ShoppingMallPrdctInfoService/getMASCntrctPrdctInfoList", { prdctClsfcNo: raw.prdctClsfcNo });
+      if (masDetails) extraData += `\n\n[다수공급자계약 품목 상세 정보]\n${JSON.stringify(masDetails, null, 2)}`;
+    }
+    
+    // 3) 입찰공고번호가 있는 경우 낙찰/계약정보 조회
+    if (bidNtceNo) {
+      const bidNtceOrd = raw.bidNtceOrd || "00";
+      const scsbidDetails = await fetchG2BExtra("/1230000/ao/ScsbidInfoService/getScsbidListSttus", { bidNtceNo, bidNtceOrd });
+      if (scsbidDetails) extraData += `\n\n[입찰 낙찰자 정보]\n${JSON.stringify(scsbidDetails, null, 2)}`;
+    }
+
+    // 4) 통합계약번호가 있는 경우 상세 계약 정보 조회
+    if (untyCntrctNo) {
+      const cntrctDetails = await fetchG2BExtra("/1230000/ao/CntrctInfoService/getCntrctInfoListThng", { untyCntrctNo, inqryDiv: "2" });
+      if (cntrctDetails) extraData += `\n\n[계약 상세 정보]\n${JSON.stringify(cntrctDetails, null, 2)}`;
+      
+      const prvtCntrctDetails = await fetchG2BExtra("/1230000/ao/PrvtCntrctInfoService/getPrvtCntrctInfoList", { untyCntrctNo, inqryDiv: "2" });
+      if (prvtCntrctDetails) extraData += `\n\n[민간계약 상세 정보]\n${JSON.stringify(prvtCntrctDetails, null, 2)}`;
+    }
+  }
+
+  // 기존 raw_data 도 컨텍스트에 추가하여 AI가 활용할 수 있도록 함
+  if (Object.keys(raw).length > 0) {
+    extraData += `\n\n[원본 공고 API 수집 데이터]\n${JSON.stringify(raw, null, 2)}`;
+  }
+
+  if (extraData) {
+    prompt += `\n\n아래는 공고를 더 정확히 분석하기 위해 실시간으로 추가 조회한 상세 데이터입니다. 이 내용을 바탕으로 시방서, 규격, 계약특기사항(cntrctSpcmntMtr), 제품특성정보, 물품상세정보(prdctDtlInfo), 첨부파일(specDocAtchFileNm1 등) 등을 분석하여 고효율기기사업(EERS) 적합 여부를 심도있게 판별하세요.${extraData}`;
+  }
+
+  return prompt;
 }
 
 export async function POST(request: NextRequest) {
@@ -123,30 +226,73 @@ export async function POST(request: NextRequest) {
     if (ne || !notice) return NextResponse.json({ error: `공고 없음: ${ne?.message}` }, { status: 404 });
 
     const keys = getApiKeys();
-    if (!keys.gemini && !keys.openai) {
+    
+    // API 키 유효성 검사 (placeholder 방지)
+    const isPlaceholder = (k: string) => !k || k.includes("__") || k.includes("your-");
+    
+    if (isPlaceholder(keys.gemini) && isPlaceholder(keys.openai)) {
       return NextResponse.json({
-        error: "AI API 키가 설정되지 않았습니다. 관리자께 문의하여 Vercel 환경변수에 키를 등록하세요.",
+        error: "AI API 키가 설정되지 않았습니다. .env.local 파일에 GEMINI_API_KEY 또는 OPENAI_API_KEY를 '진짜 키'로 입력하세요. (현재 sk-__ 형식의 placeholder가 감지됨)",
       }, { status: 500 });
     }
 
-    const prompt = buildPrompt(notice as Record<string, unknown>);
+    const prompt = await enrichNoticeContext(notice);
     let result: AIResult | undefined;
     let usedProvider = "";
     const errors: string[] = [];
 
-    // ① Gemini 우선
-    if (keys.gemini) {
-      try {
-        result = await callGemini(prompt, keys.gemini);
-        usedProvider = "Gemini 2.0 Flash";
-      } catch (e) {
-        errors.push(`Gemini: ${e}`);
-        console.warn("[analyze] Gemini 실패:", e);
+    // ① Gemini 시도 (Fallback 포함)
+    if (keys.gemini && !isPlaceholder(keys.gemini)) {
+      const models = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-flash-8b"];
+      for (const model of models) {
+        try {
+          console.log(`[analyze] Trying Gemini model: ${model}`);
+          const cleanKey = keys.gemini.replace(/[^\x00-\x7F]/g, "").trim();
+          const res = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${cleanKey}`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: { temperature: 0.3, maxOutputTokens: 1024 },
+              }),
+            }
+          );
+
+          if (res.status === 429) {
+            console.warn(`[analyze] Gemini ${model} 429: Quota exceeded. Trying next.`);
+            throw new Error(`429: Quota exceeded for ${model}`);
+          }
+
+          if (!res.ok) {
+            const body = await res.text();
+            throw new Error(`Gemini HTTP ${res.status}: ${body}`);
+          }
+
+          const data = await res.json();
+          const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+          if (!text) throw new Error(`${model} returned empty text`);
+          
+          const raw = extractJSON(text);
+          result = {
+            score:  Math.max(0, Math.min(100, Number(raw.score) || 0)),
+            reason: String(raw.reason   || "분석 완료"),
+            tips:   String(raw.tips     || ""),
+            keywords: Array.isArray(raw.keywords) ? raw.keywords.map(String) : [],
+          };
+          usedProvider = `Gemini (${model})`;
+          break; // 성공 시 루프 탈출
+        } catch (e) {
+          errors.push(`Gemini(${model}): ${e}`);
+          console.warn(`[analyze] Gemini ${model} 실패:`, e);
+          // 429면 다음 모델로 즉시 넘어감
+        }
       }
     }
 
-    // ② OpenAI 폴백
-    if (!result && keys.openai) {
+    // ② OpenAI 폴백 (Gemini가 모두 실패했거나 키가 없을 때)
+    if (!result && keys.openai && !isPlaceholder(keys.openai)) {
       try {
         result = await callOpenAI(prompt, keys.openai);
         usedProvider = "OpenAI GPT-4o-mini";
@@ -157,14 +303,18 @@ export async function POST(request: NextRequest) {
     }
 
     if (!result) {
-      return NextResponse.json({ error: errors.join(" | ") }, { status: 500 });
+      return NextResponse.json({ 
+        error: "모든 AI 모델 분석에 실패했습니다. API 키가 유효한지, 쿼터가 남아있는지 확인하세요.",
+        details: errors.join(" | ")
+      }, { status: 500 });
     }
 
-    // Supabase 업데이트
+    // Supabase 업데이트 (notice_id 테이블에 ai_ fields가 있어야 함)
     const { error: ue } = await supabase.from("notices").update({
       ai_suitability_score:  result.score,
       ai_suitability_reason: result.reason,
       ai_call_tips:          result.tips,
+      ai_keywords:           result.keywords.join(","),
     }).eq("id", noticeId);
 
     if (ue) console.error("[analyze] update error:", ue.message);

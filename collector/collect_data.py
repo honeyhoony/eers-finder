@@ -173,7 +173,8 @@ def process_kapt_item(it: dict, page_stage: str = "입찰공고") -> dict | None
         notice_date=notice_dt,
         detail_link=detail_link,
         source="K-APT",
-        kapt_code=kapt_code
+        kapt_code=kapt_code,
+        raw=it
     )
 
     # 5) 주소/사업소 최종 반영
@@ -204,11 +205,27 @@ def bulk_upsert_notices(notices):
     if not notices:
         return
     
+    # Deduplicate within the batch to avoid CardinalityViolation (multiple rows affecting same constraint)
+    seen_keys = set()
+    unique_notices = []
+    for n in notices:
+        # Unique constraint: (source_system, detail_link, model_name, assigned_office)
+        key = (n.get("source_system", "G2B"), n.get("detail_link"), n.get("model_name", "N/A"), n.get("assigned_office", ""))
+        if key not in seen_keys:
+            seen_keys.add(key)
+            unique_notices.append(n)
+        else:
+            # If duplicate in the same batch, we keep the first one
+            pass
+            
+    if not unique_notices:
+        return
+
     session.begin()
     try:
         if engine.dialect.name == 'postgresql':
             # === PostgreSQL (Supabase) Upsert ===
-            stmt = pg_insert(Notice).values(notices)
+            stmt = pg_insert(Notice).values(unique_notices)
             
             # Exclude specific columns from update
             update_cols = {
@@ -221,7 +238,6 @@ def bulk_upsert_notices(notices):
             }
             
             # Postgres requires a unique constraint name or index elements
-            # We defined "_source_detail_model_office_uc" in database.py
             stmt = stmt.on_conflict_do_update(
                 index_elements=["source_system", "detail_link", "model_name", "assigned_office"],
                 set_=update_cols
@@ -230,7 +246,7 @@ def bulk_upsert_notices(notices):
 
         else:
             # === SQLite Upsert ===
-            stmt = sqlite_insert(Notice).values(notices)
+            stmt = sqlite_insert(Notice).values(unique_notices)
             
             update_cols = {
                 col.name: col
@@ -332,6 +348,11 @@ KAPT_PRIVATE_CONTRACT_PATH = "/1613000/ApHusPrvCntrNoticeInfoOfferServiceV2/getR
 KAPT_BASIC_INFO_PATH = "/1613000/AptBasisInfoServiceV4/getAphusBassInfoV4"
 KAPT_DETAIL_INFO_PATH = "/1613000/AptBasisInfoServiceV4/getAphusDtlInfoV4"
 KAPT_MAINTENANCE_PATH = "/1613000/ApHusMntMngHistInfoOfferServiceV2/getElctyExtgElvtrMntncHistInfoSearchV2"
+
+# [추가] 누리장터(민간)
+NURI_BID_LIST_PATH = "/1230000/ao/PrvtBidPblancInfoService/getPrvtBidPblancList"
+NURI_SCSBID_LIST_PATH = "/1230000/ao/PrvtScsbidInfoService/getPrvtScsbidListSttus"
+NURI_CNTRCT_LIST_PATH = "/1230000/ao/PrvtCntrctInfoService/getPrvtCntrctInfoList"
 
 
 def _kapt_items_safely(data) -> list[dict]:
@@ -965,7 +986,7 @@ def _as_dict(x):
 import xml.etree.ElementTree as ET
 
 # KEA API 엔드포인트
-KEA_API_URL = "http://apis.data.go.kr/B553530/CRTIF/CRITF_01_LIST"
+KEA_API_URL = "https://apis.data.go.kr/B553530/CRTIF/CRITF_01_LIST"
 
 def _normalize_model(model: str) -> str:
     """모델명을 API 조회에 적합하게 정규화합니다."""
@@ -1035,7 +1056,7 @@ def kea_has_model(model: str) -> bool | None:
     ROWS = 200
 
     base_params = {
-        "serviceKey": config.KEA_SERVICE_KEY,  # Decoding Key 사용
+        "serviceKey": (getattr(config, "KEA_SERVICE_KEY_DECODING", None) or config.KEA_SERVICE_KEY),
         "numOfRows": ROWS,
         "apiType": "json",
     }
@@ -1181,7 +1202,8 @@ HARD_DENY_KEYWORDS = [
 # 권역 판별(텍스트에 다른 광역권만 분명히 나오면 컷)
 TARGET_REGION_KEYWORDS = [
     "대구", "대구광역시", "경북", "경상북도",
-    "포항", "경주", "경산", "김천", "영천", "칠곡", "성주", "청도", "고령", "영덕"
+    "포항", "경주", "경산", "김천", "영천", "칠곡", "성주", "청도", "고령", "영덕",
+    "안동", "구미", "상주", "영주", "의성", "문경", "예천", "봉화", "울진", "군위", "청송", "영양"
 ]
 OTHER_REGION_KEYWORDS = [
     # 수도권
@@ -1420,7 +1442,7 @@ def assign_offices_by_address(addr: str) -> List[str]:
 # =========================
 # UsrInfo(상세주소) & Mall(시군구) 우선순위 선택
 # =========================
-def get_full_address_from_usr_info(dminstt_code: str) -> Optional[str]:
+def get_full_address_from_usr_info(dminstt_code: str) -> Tuple[Optional[str], Optional[str]]:
     """
     UsrInfoService.getDminsttInfo (코드 기준)
     - inqryDiv=2(변경일 기준) + 12개월 기간 필수
@@ -1476,32 +1498,48 @@ def get_full_address_from_usr_info(dminstt_code: str) -> Optional[str]:
             it = items[0]
             full = f"{it.get('adrs','')}".strip()
             dtl  = f"{it.get('dtlAdrs','')}".strip()
-            text = (full + " " + dtl).strip() or it.get("rgnNm")
+            # adrs 와 dtlAdrs를 조합
+            text = (full + " " + dtl).strip() or it.get("rgnNm", "")
+            
+            dminsttNm = it.get('dminsttNm', '')
+            
+            res = (text, dminsttNm)
             # 캐시에 적재
-            _cache[dminstt_code] = text
-            return text
+            _cache[dminstt_code] = res
+            return res
     except Exception as e:
         print(f"  [Warn] 사용자정보 API 실패: {dminstt_code} ({e})")
     finally:
         # 마지막 호출시각 갱신
         get_full_address_from_usr_info._last_call = time.time()  # type: ignore[attr-defined]
 
-    return None
+    return None, None
 
 
-def parse_dminstt_code_from_complex(s: str) -> Tuple[Optional[str], Optional[str]]:
-    """'[코드^이름^기관명]|[...]' 형식에서 첫 항목의 코드/명 파싱"""
+def parse_dminstt_code_from_complex(s: str) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+    """'[코드^이름^기관명]|[...]' 형식에서 첫 항목의 코드/명/전화번호 파싱"""
     if not s:
-        return None, None
+        return None, None, None
     try:
         first = s.strip("[]").split("],[")[0].strip("[]")
         parts = first.split("^")
-        if len(parts) >= 3:
-            return parts[1], parts[2]
+        code = parts[1] if len(parts) > 1 else None
+        name = parts[2] if len(parts) > 2 else None
+        manager_phone = parts[6] if len(parts) > 6 else None
+        return code, name, manager_phone
     except Exception:
         pass
-    return None, None
-    
+    return None, None, None
+
+def construct_shop_g2b_link(it: dict) -> str:
+    """종합쇼핑몰(shop.g2b.go.kr) 내 물품 상세 링크 생성"""
+    # 물품분류번호(8자리) + 식별번호(8자리)
+    cat_id = it.get("prdctClsfcNo") or it.get("itemClsfcNo")
+    item_id = it.get("prdctIdntfcNo") or it.get("itemIdntfcNo")
+    if cat_id and item_id:
+        return f"https://shop.g2b.go.kr/sp/goods/goodsDetail.do?goodsCd={item_id}&goodsClsfcNo={cat_id}"
+    return ""
+
 def guess_mall_addr(item: dict) -> Optional[str]:
     keys_try = [
         # 공통/납품요구
@@ -2007,7 +2045,7 @@ def finalize_notice_dict(base_notice, client_code, mall_addr, client_name):
 # [수정] _build_base_notice 함수에 source_system 필드 추가
 def _build_base_notice(stage: str, biz_type: str, project_name: str, client: str, phone: str,
                        model: str, qty: int, amount: str, is_cert: str, notice_date: str, detail_link: str,
-                       source: str = 'G2B', kapt_code: Optional[str] = None) -> Dict: # kapt_code 파라미터 추가
+                       source: str = 'G2B', kapt_code: Optional[str] = None, raw: Optional[Dict] = None) -> Dict:
     return {
         "stage": stage, "biz_type": biz_type,
         "project_name": project_name or "",
@@ -2024,7 +2062,12 @@ def _build_base_notice(stage: str, biz_type: str, project_name: str, client: str
         "assigned_office": "",
         "is_favorite": False, "status": "", "memo": "",
         "source_system": source,
-        "kapt_code": kapt_code, # 반환 딕셔셔리에 kapt_code 추가
+        "kapt_code": kapt_code,
+        "manager_name": (raw.get("dmndInsttOfclNm") or raw.get("cntrctInsttOfclNm") or raw.get("insttOfclNm") or raw.get("manager_name")) if raw else None,
+        "manager_email": (raw.get("dmndInsttOfclEmailAdres") or raw.get("cntrctInsttOfclEmailAdres") or raw.get("insttOfclEmailAdres") or raw.get("manager_email")) if raw else None,
+        "manager_phone": (raw.get("dmndInsttOfclPhoneNumber") or raw.get("cntrctInsttOfclTelNo") or raw.get("cntrctInsttOfclPhoneNumber") or raw.get("insttOfclPhone") or raw.get("manager_phone")) if raw else None,
+        "client_fax": (raw.get("cntrctInsttOfclFaxNo") or raw.get("faxNo")) if raw else "",
+        "raw_data": json.dumps(raw, ensure_ascii=False) if raw else "{}"
     }
 
 def fetch_kapt_basic_info(
@@ -2186,107 +2229,223 @@ def fetch_kapt_maintenance_history(kapt_code: str) -> list[dict]:
 
 
 
+SIDO_CODES = ["11", "26", "27", "28", "29", "30", "31", "36", "41", "42", "43", "44", "45", "46", "47", "48", "50"]
+
 def fetch_and_process_kapt_bids(search_ymd: str):
-    """K-APT 입찰공고 수집 — 로그는 '제외/저장 대기/일괄 저장'만 출력 (주소는 로그 끝에 표시)."""
-    print(f"\n--- [{to_ymd(search_ymd)}] 공동주택(K-APT) 입찰공고 수집 ---")
+    """K-APT 입찰공고 수집 — 전국 모든 광역시도 수집 루프 추가"""
+    print(f"\n--- [{to_ymd(search_ymd)}] 공동주택(K-APT) 입찰공고 수집 (전국) ---")
+    
+    total_buffer = []
 
-    try:
-        params_first = {
-            "serviceKey": config.KAPT_SERVICE_KEY, "pageNo": "1", "numOfRows": "1",
-            "startDate": search_ymd, "endDate": search_ymd, "_type": "json"
-        }
-        first = http_get_json(api_url(KAPT_BID_LIST_PATH), params_first)
-        total = int(first.get("response", {}).get("body", {}).get("totalCount", 0))
-        if total == 0:
-            print("- 데이터 없음"); return
-    except Exception as e:
-        print(f"[Error] K-apt 총 건수 조회 실패: {e}"); return
-
-    page_size = 100
-    total_pages = (total + page_size - 1) // page_size
-    #print(f"- 총 {total}건 / {total_pages}p")
-    print(f"- 총 {total}건")
-
-    params_list = [{
-        "serviceKey": config.KAPT_SERVICE_KEY, "pageNo": str(p), "numOfRows": str(page_size),
-        "startDate": search_ymd, "endDate": search_ymd, "_type": "json"
-    } for p in range(1, total_pages + 1)]
-
-    pages = fetch_pages_parallel(api_url(KAPT_BID_LIST_PATH), params_list)
-
-    buffer = []
-    for data in pages:
-        items = data.get("response", {}).get("body", {}).get("items", [])
-        if not items:
-            continue
-
-        for it in items:
-            title = (it.get("bidTitle") or "").strip()
-            if not is_relevant_text(title,
-                                    _as_text(it.get("codeClassifyType1")),
-                                    _as_text(it.get("codeClassifyType2")),
-                                    _as_text(it.get("codeClassifyType3")),
-                                    _as_text(it.get("bidMethod")),
-                                    _as_text(it.get("bidKaptname"))):
+    # 17개 시도 루프 (필요 시 더 세분화하거나 DeSearchV2 하나로 전국이 나오는지 재확인 가능)
+    # 현재는 확실한 전국 수집을 위해 시도 루프를 적용해봅니다.
+    for sido in SIDO_CODES:
+        try:
+            params_first = {
+                "serviceKey": config.KAPT_SERVICE_KEY, "pageNo": "1", "numOfRows": "1",
+                "startDate": search_ymd, "endDate": search_ymd, "sidoCode": sido, "_type": "json"
+            }
+            # DeSearchV2는 sidoCode 필터가 있을 수도 없을 수도 있지만, 있는 경우 더 정확합니다.
+            first = http_get_json(api_url(KAPT_BID_LIST_PATH), params_first)
+            # body.item 이 있나 확인
+            body = (first.get("response") or {}).get("body") or {}
+            total = int(body.get("totalCount", 0))
+            if total == 0:
                 continue
+                
+            page_size = 100
+            total_pages = (total + page_size - 1) // page_size
+            
+            p_list = [{
+                "serviceKey": config.KAPT_SERVICE_KEY, "pageNo": str(p), "numOfRows": str(page_size),
+                "startDate": search_ymd, "endDate": search_ymd, "sidoCode": sido, "_type": "json"
+            } for p in range(1, total_pages + 1)]
+            
+            pages = fetch_pages_parallel(api_url(KAPT_BID_LIST_PATH), p_list)
+            
+            for data in pages:
+                items = _kapt_items_safely(data)
+                for it in items:
+                    title = (it.get("bidTitle") or "").strip()
+                    if not is_relevant_text(title,
+                                            _as_text(it.get("codeClassifyType1")),
+                                            _as_text(it.get("codeClassifyType2")),
+                                            _as_text(it.get("codeClassifyType3")),
+                                            _as_text(it.get("bidMethod")),
+                                            _as_text(it.get("bidKaptname"))):
+                        continue
 
+                    kapt_code   = (it.get("aptCode") or it.get("kaptCode") or "").strip()
+                    client_name = (it.get("bidKaptname") or "").strip() or "단지명 없음"
+                    bid_no      = it.get("bidNum")
+                    detail_link = f"https://www.k-apt.go.kr/bid/bidDetail.do?bid_noti_no={bid_no}" if bid_no else ""
+                    biz_type    = it.get("codeClassifyType1", "기타")
 
-            kapt_code   = (it.get("aptCode") or "").strip()
-            client_name = (it.get("bidKaptname") or "").strip() or "단지명 없음"
-            bid_no      = it.get("bidNum")
-            detail_link = f"https://www.k-apt.go.kr/bid/bidDetail.do?bid_noti_no={bid_no}" if bid_no else ""
-            biz_type    = it.get("codeClassifyType1", "기타")
+                    # 주소/법정동코드 보강
+                    bjd_code, addr_txt = "", ""
+                    basic = None
+                    if kapt_code:
+                        basic = fetch_kapt_basic_info(kapt_code)
+                        if basic:
+                            bjd_code = str(basic.get("bjdCode") or "")
+                            addr_txt = (basic.get("doroJuso") or basic.get("kaptAddr") or "").strip()
+                    
+                    if not bjd_code:
+                        raw_bjd = str(it.get("bidArea") or "")
+                        if len(raw_bjd) >= 8:
+                            bjd_code = raw_bjd[:10]
+                    
+                    if not addr_txt and bjd_code and HAS_BJD_MAPPER:
+                        addr_txt = get_bjd_name(bjd_code)
 
-            # 주소/법정동코드 보강
-            bjd_code, addr_txt = "", ""
-            if kapt_code:
-                basic = fetch_kapt_basic_info(kapt_code)
-                if basic:
-                    bjd_code = str(basic.get("bjdCode") or "")
-                    addr_txt = (basic.get("doroJuso") or basic.get("kaptAddr") or "").strip()
-            if not bjd_code:
-                raw = str(it.get("bidArea") or "")
-                if len(raw) >= 8:
-                    bjd_code = raw[:10]
-            if not addr_txt and bjd_code and HAS_BJD_MAPPER:
-                addr_txt = get_bjd_name(bjd_code)
+                    # 관할본부/지사 판정
+                    from region_mapper import resolve_hq_and_office
+                    assigned_hq, assigned_office = resolve_hq_and_office(addr_txt, bjd_code, _assign_office_from_bjd_code)
 
-            # 관할본부/지사 판정
-            from region_mapper import resolve_hq_and_office
-            assigned_hq, assigned_office = resolve_hq_and_office(addr_txt, bjd_code, _assign_office_from_bjd_code)
+                    base = _build_base_notice(
+                        stage="입찰공고",
+                        biz_type=biz_type,
+                        project_name=title,
+                        client=client_name,
+                        phone="", model="", qty=0, amount="",
+                        is_cert="확인필요",
+                        notice_date=to_ymd(it.get("bidRegDate") or it.get("bidRegdate")),
+                        detail_link=detail_link,
+                        source='K-APT',
+                        kapt_code=kapt_code,
+                        raw=it,
+                    )
+                    
+                    # 연락처 보강: 1) 관리소(kaptTel) / 2) 공고 담당자(bidMngTel, bidTel)
+                    phone_mgmt = ""
+                    if basic:
+                        phone_mgmt = basic.get("kaptTel") or basic.get("kaptFax") or ""
+                    
+                    base["phone_number"] = phone_mgmt  # 관리소 전화
+                    base["manager_phone"] = it.get("bidMngTel") or it.get("bidTel") or it.get("bidPhone") or ""
+                    base["manager_name"] = it.get("bidMngNm") or it.get("bidMngName") or ""
+                    
+                    base["assigned_hq"] = assigned_hq
+                    base["assigned_office"] = assigned_office
 
-            # 전국권 허용으로 변경하여 권역 제외 로직 주석 처리
-            # if assigned_office.startswith("관할") and not (addr_txt.startswith("대구") or bjd_code.startswith("27")):
-            #     log_kapt_excluded(client_name, addr_txt or bjd_code)
-            #     continue
+                    n = finalize_notice_dict(base, None, addr_txt, client_name)
+                    if n:
+                        total_buffer.append(n)
+        except Exception as e:
+            print(f"  [Error] {sido} 시도 K-APT 수집 실패: {e}")
 
-            base = _build_base_notice(
-                stage="입찰공고",
-                biz_type=biz_type,
-                project_name=title,
-                client=client_name,
-                phone="", model="", qty=0, amount="",
-                is_cert="확인필요",
-                notice_date=to_ymd(it.get("bidRegDate")),
-                detail_link=detail_link,
-                source='K-APT',
-                kapt_code=kapt_code,
-            )
-            base["assigned_hq"] = assigned_hq
-            base["assigned_office"] = assigned_office
+    if total_buffer:
+        bulk_upsert_notices(total_buffer)
+        log_kapt_bulk_saved(len(total_buffer))
 
-            n = finalize_notice_dict(base, None, addr_txt, client_name)
-            if n:
-                buffer.append(n)
-                log_kapt_pending(assigned_office, client_name, addr_txt or bjd_code)
-
-    if buffer:
-        bulk_upsert_notices(buffer)
-        log_kapt_bulk_saved(len(buffer))
-
-
-# [추가] K-APT 입찰 결과 API 엔드포인트
+# [추가] K-APT 입찰 결과 API 엔드포인트 및 함수
 KAPT_BID_RESULT_PATH = "/1613000/ApHusBidResultNoticeInfoOfferServiceV2/getPblAncDeSearchV2"
+
+def fetch_and_process_kapt_bid_results(search_ymd: str):
+    """K-APT 입찰결과 수집 (전국)"""
+    print(f"\n--- [{to_ymd(search_ymd)}] 공동주택(K-APT) 입찰결과 수집 (전국) ---")
+    total_buffer = []
+    
+    for sido in SIDO_CODES:
+        try:
+            params = {
+                "serviceKey": config.KAPT_SERVICE_KEY, "pageNo": "1", "numOfRows": "100",
+                "startDate": search_ymd, "endDate": search_ymd, "sidoCode": sido, "_type": "json"
+            }
+            data = http_get_json(api_url(KAPT_BID_RESULT_PATH), params)
+            items = _kapt_items_safely(data)
+            
+            for it in items:
+                title = (it.get("bidTitle") or "").strip()
+                if not is_relevant_text(title): continue
+                
+                kapt_code = (it.get("aptCode") or "").strip()
+                bid_no = it.get("bidNum")
+                notice_dt = to_ymd(it.get("bidSccDate") or it.get("bidRegDate"))
+                
+                basic = fetch_kapt_basic_info(kapt_code) if kapt_code else None
+                addr_txt = (basic.get("doroJuso") or basic.get("kaptAddr") or "") if basic else ""
+                bjd_code = basic.get("bjdCode") if basic else ""
+                
+                from region_mapper import resolve_hq_and_office
+                assigned_hq, assigned_office = resolve_hq_and_office(addr_txt, str(bjd_code), _assign_office_from_bjd_code)
+                
+                base = _build_base_notice(
+                    stage="낙찰결과",
+                    biz_type=it.get("codeClassifyType1", "기타"),
+                    project_name=title,
+                    client=it.get("bidKaptname") or "단지명 없음",
+                    phone=basic.get("kaptTel") if basic else "",
+                    model="", qty=0, amount=it.get("bidSccAmount") or "",
+                    is_cert="확인필요",
+                    notice_date=notice_dt,
+                    detail_link=f"https://www.k-apt.go.kr/bid/bidDetail.do?bid_noti_no={bid_no}" if bid_no else "",
+                    source='K-APT',
+                    kapt_code=kapt_code,
+                    raw=it
+                )
+                base["assigned_hq"] = assigned_hq
+                base["assigned_office"] = assigned_office
+                
+                n = finalize_notice_dict(base, None, addr_txt, base["client"])
+                if n: total_buffer.append(n)
+        except: pass
+        
+    if total_buffer:
+        bulk_upsert_notices(total_buffer)
+        print(f"  [K-APT] 입찰결과 {len(total_buffer)}건 업데이트됨")
+
+def fetch_and_process_kapt_private_contracts(search_ymd: str):
+    """K-APT 수의계약 수집 (전국)"""
+    print(f"\n--- [{to_ymd(search_ymd)}] 공동주택(K-APT) 수의계약 수집 (전국) ---")
+    total_buffer = []
+    
+    for sido in SIDO_CODES:
+        try:
+            params = {
+                "serviceKey": config.KAPT_SERVICE_KEY, "pageNo": "1", "numOfRows": "100",
+                "startDate": search_ymd, "endDate": search_ymd, "sidoCode": sido, "_type": "json"
+            }
+            data = http_get_json(api_url(KAPT_PRIVATE_CONTRACT_PATH), params)
+            items = _kapt_items_safely(data)
+            
+            for it in items:
+                title = (it.get("cntrctTitle") or it.get("bidTitle") or "").strip()
+                if not is_relevant_text(title): continue
+                
+                kapt_code = (it.get("aptCode") or "").strip()
+                notice_dt = to_ymd(it.get("cntrctDate") or it.get("bidRegDate"))
+                
+                basic = fetch_kapt_basic_info(kapt_code) if kapt_code else None
+                addr_txt = (basic.get("doroJuso") or basic.get("kaptAddr") or "") if basic else ""
+                
+                from region_mapper import resolve_hq_and_office
+                assigned_hq, assigned_office = resolve_hq_and_office(addr_txt, "", _assign_office_from_bjd_code)
+                
+                base = _build_base_notice(
+                    stage="수의계약",
+                    biz_type=it.get("codeClassifyType1", "기타"),
+                    project_name=title,
+                    client=it.get("bidKaptname") or "단지명 없음",
+                    phone=basic.get("kaptTel") if basic else "",
+                    model="", qty=0, amount=it.get("cntrctAmount") or "",
+                    is_cert="확인필요",
+                    notice_date=notice_dt,
+                    detail_link="https://www.k-apt.go.kr/bid/privateCntrctList.do",
+                    source='K-APT',
+                    kapt_code=kapt_code,
+                    raw=it
+                )
+                base["assigned_hq"] = assigned_hq
+                base["assigned_office"] = assigned_office
+                
+                n = finalize_notice_dict(base, None, addr_txt, base["client"])
+                if n: total_buffer.append(n)
+        except: pass
+
+    if total_buffer:
+        bulk_upsert_notices(total_buffer)
+        print(f"  [K-APT] 수의계약 {len(total_buffer)}건 업데이트됨")
 
 
 
@@ -2369,7 +2528,7 @@ def _assign_office_from_bjd_code(bjd_code: str, addr_text: str = "") -> str:
     return "관할지사확인요망"
 
 # ===== 공용 상수/도우미 =====
-PAGE_SIZE = 100  # 전역 통일
+PAGE_SIZE = 200  # 한 화면에 200건씩 처리하도록 상향
 
 # 엔드포인트
 PATH_PBL  = "/1613000/ApHusBidResultNoticeInfoOfferServiceV2/getPblAncDeSearchV2"   # 공고일 범위
@@ -2404,6 +2563,18 @@ def next_business_day(yyyymmdd: str) -> str:
         d += timedelta(days=1)
         if _is_business_day(d):
             return d.strftime("%Y%m%d")
+
+def _fmt_keywords(text: str) -> str:
+    """led, LED -> LED 로 통일하고 중복 제거하여 대표 한 개 위주로 표시"""
+    if not text: return ""
+    # 콤마나 공백으로 분리
+    words = [w.strip().upper() for w in re.split(r'[,|]', text) if w.strip()]
+    # 중복 제거 후 첫 번째 대표 키워드만 반환 (또는 상위 1~2개)
+    unique_words = []
+    for w in words:
+        if w not in unique_words:
+            unique_words.append(w)
+    return ", ".join(unique_words[:1]) # 대표 한 개만 표시
 
 def _date8(s: str) -> str:
     if not s:
@@ -2677,7 +2848,7 @@ def fetch_and_process_kapt_bid_results(search_ymd: str):
                 client=client_name, phone="", model="", qty=0,
                 amount=(it.get("amount") or ""), is_cert="확인필요",
                 notice_date=to_ymd(it.get("bidDeadline") or it.get("bidRegdate")),
-                detail_link=detail, source='K-APT', kapt_code=kapt_code
+                detail_link=detail, source='K-APT', kapt_code=kapt_code, raw=it
             )
             base["assigned_hq"] = assigned_hq
             base["assigned_office"] = assigned_office
@@ -2877,7 +3048,8 @@ def fetch_and_process_kapt_private_contracts(search_ymd: str):
                 notice_date=notice_date,         # ← regDate 고정
                 detail_link=detail_link,
                 source="K-APT",
-                kapt_code=kapt_code
+                kapt_code=kapt_code,
+                raw=it
             )
 
             # finalize에서 memo를 합치고 싶다면 여기서 merge (옵션)
@@ -2957,7 +3129,7 @@ def fetch_and_process_order_plans(search_ymd: str):
             base = _build_base_notice(
                 "발주계획", "물품", title, client_name, it.get("telNo", ""),
                 "계획 단계 확인", 0, it.get("sumOrderAmt") or "", "확인필요",
-                to_ymd(it.get("nticeDt")), detail_link
+                to_ymd(it.get("nticeDt")), detail_link, raw=it
             )
             expand_and_store_with_priority(base, client_code, mall_addr, client_name)
 
@@ -3017,12 +3189,13 @@ def fetch_and_process_bid_notices(search_ymd: str):
                 if not detail_link:
                     bid_no = it.get('bidNtceNo') or ''
                     if bid_no:
-                        detail_link = f"http://www.g2b.go.kr/pt/menu/selectSubFrame.do?framesrc=/pt/bid/bidInfoList.do?taskClCd=1&bidno={bid_no}"
+                        # 신규 나라장터 입찰공고 상세 URL
+                        detail_link = f"https://www.g2b.go.kr:8101/ep/tbid/tbBidNtceDtlView.do?bidNtceNo={bid_no}&bidNtceOrd=01"
 
                 base = _build_base_notice(
                     "입찰공고", "물품", title, client_name, it.get("dmndInsttOfclTel", "") or it.get("telNo",""),
                     "공고 확인 필요", 0, it.get("asignBdgtAmt") or "", "확인필요",
-                    to_ymd(it.get("bidNtceDate") or it.get("ntceDt")), detail_link or ""
+                    to_ymd(it.get("bidNtceDate") or it.get("ntceDt")), detail_link or "", raw=it
                 )
                 expand_and_store_with_priority(base, client_code, mall_addr, client_name)
 
@@ -3031,7 +3204,410 @@ def fetch_and_process_bid_notices(search_ymd: str):
         except Exception as e:
             session.rollback()
             print(f"  [Error] 입찰공고 처리 오류: {e}")
+
+# --- 민간입찰(누리장터) ---
+def fetch_and_process_nuri_bids(search_ymd: str):
+    print(f"\n--- [{to_ymd(search_ymd)}] 민간입찰(누리장터) 수집 ---")
+    
+    # 1) 총건수 1회 조회
+    first = http_get_json(api_url(NURI_BID_LIST_PATH), {
+        "ServiceKey": config.NARA_SERVICE_KEY, "type": "json",
+        "pageNo": "1", "numOfRows": "1",
+        "inqryBgnDate": search_ymd, "inqryEndDate": search_ymd
+    })
+    if not isinstance(first, dict):
+        print("  - 응답 없음"); return
+
+    body = _as_dict(first.get("response", {}).get("body"))
+    total = int(body.get("totalCount", 0))
+    if total == 0:
+        print("  - 데이터 없음"); return
+
+    page_size   = 100
+    total_pages = (total + page_size - 1) // page_size
+    print(f"  - 총 {total}건")
+
+    # 2) 병렬 페이지 수집
+    params_list = [{
+        "ServiceKey": config.NARA_SERVICE_KEY, "type": "json",
+        "pageNo": str(p), "numOfRows": str(page_size),
+        "inqryBgnDate": search_ymd, "inqryEndDate": search_ymd
+    } for p in range(1, total_pages + 1)]
+
+    pages = fetch_pages_parallel(api_url(NURI_BID_LIST_PATH), params_list)
+
+    # 3) 결과 처리
+    buffer = []
+    for data in pages:
+        if not isinstance(data, dict):
+            continue
+        items = _as_items_list(_as_dict(data.get("response", {}).get("body")))
+        for it in items:
+            # ── 업무구분 필터 ──
+            # bidNtceClsfc (공고분류: 물품, 공사, 용역, 기타)
+            clsfc = _as_text(it.get("bidNtceClsfc"))
+            
+            # ── 공고명 / 텍스트 필터 ──
+            title = _as_text(it.get("ntceNm") or it.get("bidNtceNm") or it.get("bidNm"))
+            client_name = _as_text(it.get("ntceInsttNm") or it.get("dmndInsttNm") or it.get("dminsttNm")) or "기관명 없음"
+            
+            if not is_relevant_text(
+                title,
+                clsfc,
+                _as_text(it.get("itemNm") or it.get("prdctNm")),
+                client_name,
+            ):
+                continue
+
+            # ── 기관 정보 ──
+            client_code = _as_text(it.get("dmndInsttCd") or it.get("dminsttCd") or "")
+            mall_addr   = guess_mall_addr(it)
+
+            # ── API 문서 전체 필드 수집 ──
+            bid_no       = _as_text(it.get("bidNtceNo"))        # 입찰공고번호
+            bid_ord      = _as_text(it.get("bidNtceOrd"))       # 입찰공고차수
+            clsfc        = _as_text(it.get("bidNtceClsfc"))     # 입찰공고분류(물품, 공사, 용역, 기타)
+            ntice_dt     = _as_text(it.get("nticeDt"))           # 게시일시
+            ref_no       = _as_text(it.get("refNo"))             # 참조번호
+            ntce_nm      = title                                  # 공고명
+            ntce_div     = _as_text(it.get("ntceDivNm"))        # 공고구분명(긴급, 재공고 등)
+            instt_nm     = client_name                            # 공고기관명
+            bid_methd    = _as_text(it.get("bidMethdNm"))       # 입찰방식명
+            cntrct_mthd  = _as_text(it.get("cntrctMthdNm"))     # 계약방법명
+            sucsfbid_mthd= _as_text(it.get("sucsfbidMthdNm"))   # 낙찰방법명
+            rbid_div     = _as_text(it.get("rbidDivNm"))        # 재입찰구분명
+            bid_qlfct    = _as_text(it.get("bidQlfctNm"))       # 입찰자격명
+            ofcl_nm      = _as_text(it.get("ofclNm"))           # 담당자명
+            ofcl_tel     = _as_text(it.get("ofclTelNo") or it.get("dmndInsttOfclTelNo") or it.get("telNo"))
+            ofcl_email   = _as_text(it.get("ofclEmail"))        # 담당자이메일
+            bid_begin    = _as_text(it.get("bidBeginDt"))       # 입찰개시일시
+            bid_clse     = _as_text(it.get("bidClseDt"))        # 입찰마감일시
+
+            # ── 상세 URL ──
+            detail_link = _as_text(it.get("bidNtceUrl"))
+            if not detail_link and bid_no:
+                detail_link = (
+                    f"https://www.g2b.go.kr:8101/ep/tbid/privateBidPblancDetail.do"
+                    f"?bidNtceNo={bid_no}&bidNtceOrd={bid_ord or '01'}"
+                )
+
+            # ── 금액 결정 (입찰공고이므로 배정예산 asignBdgtAmt 등 확인) ──
+            amount_str = _as_text(it.get("asignBdgtAmt") or "")
+
+            # ── raw 데이터 보강 ──
+            enriched_raw = dict(it)
+            enriched_raw["_nuri_bid_meta"] = {
+                "bidNtceNo":      bid_no,
+                "bidNtceOrd":     bid_ord,
+                "bidNtceClsfc":   clsfc,
+                "nticeDt":        ntice_dt,
+                "refNo":          ref_no,
+                "ntceNm":         ntce_nm,
+                "ntceDivNm":      ntce_div,
+                "ntceInsttNm":    instt_nm,
+                "bidMethdNm":     bid_methd,
+                "cntrctMthdNm":   cntrct_mthd,
+                "sucsfbidMthdNm": sucsfbid_mthd,
+                "rbidDivNm":      rbid_div,
+                "bidQlfctNm":     bid_qlfct,
+                "ofclNm":         ofcl_nm,
+                "ofclTelNo":      ofcl_tel,
+                "ofclEmail":      ofcl_email,
+                "bidBeginDt":     bid_begin,
+                "bidClseDt":      bid_clse,
+            }
+
+            base = _build_base_notice(
+                "민간입찰", clsfc or "물품", ntce_nm, instt_nm,
+                ofcl_tel,
+                "공고 확인 필요", 0, amount_str, "확인필요",
+                to_ymd(ntice_dt or it.get("bidNtceDate") or it.get("ntceDt")),
+                detail_link,
+                source="NURI", raw=enriched_raw
+            )
+
+            # 담당자 정보 Notice 필드에 직접 반영
+            if ofcl_nm:
+                base["manager_name"]  = ofcl_nm
+            if ofcl_tel:
+                base["manager_phone"] = ofcl_tel
+            if ofcl_email:
+                base["manager_email"] = ofcl_email
+
+            n = expand_and_store_with_priority(base, client_code, mall_addr, instt_nm, save=False)
+            if n:
+                buffer.append(n)
+
+    # 4) 벌크 업서트
+    if buffer:
+        bulk_upsert_notices(buffer)
+        print(f"  [\u2705 일괄 저장] {len(buffer)}건")
+    else:
+        print("  - 관심 항목 없음")
+
+
+
+# --- 민간낙찰(누리장터) ---
+def fetch_and_process_nuri_success_bids(search_ymd: str):
+    print(f"\n--- [{to_ymd(search_ymd)}] 민간낙찰(누리장터) 수집 ---")
+    page, page_size, total_pages = 1, 100, 1
+    while page <= total_pages:
+        params = {
+            "ServiceKey": config.NARA_SERVICE_KEY, "type": "json",
+            "pageNo": str(page), "numOfRows": str(page_size),
+            "inqryDiv": "1", "inqryBgnDt": f"{search_ymd}0000", "inqryEndDt": f"{search_ymd}2359"
+        }
+        try:
+            data = http_get_json(api_url(NURI_SCSBID_LIST_PATH), params)
+            if not isinstance(data, dict):
+                page += 1; time.sleep(0.35); continue
+            
+            body = _as_dict(data.get("response", {}).get("body"))
+            if page == 1:
+                total = int(body.get("totalCount", 0))
+                if total == 0:
+                    print("  - 데이터 없음"); break
+                total_pages = (total + page_size - 1) // page_size
+                print(f"  - 총 {total}건")
+
+            items = _as_items_list(body)
+            if not items:
+                page += 1; time.sleep(0.35); continue
+
+            for it in items:
+                if it.get("bsnsDivNm") and it.get("bsnsDivNm") != "물품":
+                    continue
+                title = it.get("bidNtceNm", "") or it.get("bidNm", "")
+                if not is_relevant_text(title, 
+                                        _as_text(it.get("bsnsDivNm")),
+                                        _as_text(it.get("itemNm") or it.get("prdctNm")),
+                                        _as_text(it.get("dmndInsttNm") or it.get("dminsttNm"))):
+                    continue
+
+                client_code = it.get("dmndInsttCd") or it.get("dminsttCd")
+                client_name = it.get("dmndInsttNm") or it.get("dminsttNm") or "기관명 없음"
+                mall_addr = guess_mall_addr(it)
+
+                bid_no = it.get('bidNtceNo') or ''
+                bid_ord = it.get('bidNtceOrd') or '01'
+                detail_link = it.get("bidNtceUrl") or ""
+                if not detail_link and bid_no:
+                    detail_link = f"https://www.g2b.go.kr:8101/ep/tbid/privateScsbidDetail.do?bidNtceNo={bid_no}&bidNtceOrd={bid_ord}"
+
+                base = _build_base_notice(
+                    "민간낙찰", "물품", title, client_name, it.get("dmndInsttOfclTelNo", "") or it.get("telNo","") or it.get("fnlSucsfEntrpsTlno", ""),
+                    "낙찰 확인 필요", 0, it.get("opngAmt") or it.get("bidAmt") or "", "확인필요",
+                    to_ymd(it.get("bidNtceDate") or it.get("opngDt")), detail_link, 
+                    source="NURI", raw=it
+                )
+                expand_and_store_with_priority(base, client_code, mall_addr, client_name)
+
+            page += 1
+            time.sleep(0.35)
+        except Exception as e:
+            session.rollback()
+            print(f"  [Error] 누리장터 낙찰 처리 오류: {e}")
             break
+
+# --- 민간계약(누리장터) ---
+def fetch_and_process_nuri_contracts(search_ymd: str):
+    print(f"\n--- [{to_ymd(search_ymd)}] 민간계약(누리장터) 수집 ---")
+
+    # ── 업체목록(corpList) 파싱 ─────────────────────────────────────────
+    def _parse_nuri_corp_list(raw_str: str) -> list:
+        """
+        '[순번^업체구분^공동도급방식구분^업체명^대표자명^국적명^지분율^채권자명^담당자성명],...'
+        -> list of dict
+        """
+        if not raw_str:
+            return []
+        results = []
+        blocks = re.findall(r"\[([^\]]*)\]", raw_str)
+        for blk in blocks:
+            parts = blk.split("^")
+            results.append({
+                "seq":           parts[0] if len(parts) > 0 else "",
+                "corpDiv":       parts[1] if len(parts) > 1 else "",   # 업체구분(주계약업체/하도급 등)
+                "jntContrDiv":   parts[2] if len(parts) > 2 else "",   # 공동도급방식구분(단독/분담 등)
+                "corpNm":        parts[3] if len(parts) > 3 else "",   # 업체명
+                "nationNm":      parts[4] if len(parts) > 4 else "",   # 국적명
+                "shareRate":     parts[5] if len(parts) > 5 else "",   # 지분율
+                "bondClaimerNm": parts[6] if len(parts) > 6 else "",   # 채권자명
+                "mgrNm":         parts[7] if len(parts) > 7 else "",   # 담당자성명
+            })
+        return results
+
+    # ── 병렬 수집 방식으로 변경 ─────────────────────────────────────────
+    # 1) 총건수 1회 조회
+    first = http_get_json(api_url(NURI_CNTRCT_LIST_PATH), {
+        "ServiceKey": config.NARA_SERVICE_KEY, "type": "json",
+        "pageNo": "1", "numOfRows": "1",
+        "cntrctCnclsBgnDate": search_ymd, "cntrctCnclsEndDate": search_ymd
+    })
+    if not isinstance(first, dict):
+        print("  - 응답 없음"); return
+
+    body  = _as_dict(first.get("response", {}).get("body"))
+    total = int(body.get("totalCount", 0))
+    if total == 0:
+        print("  - 데이터 없음"); return
+
+    page_size   = 100
+    total_pages = (total + page_size - 1) // page_size
+    print(f"  - 총 {total}건")
+
+    # 2) 병렬 페이지 수집
+    params_list = [{
+        "ServiceKey": config.NARA_SERVICE_KEY, "type": "json",
+        "pageNo": str(p), "numOfRows": str(page_size),
+        "cntrctCnclsBgnDate": search_ymd, "cntrctCnclsEndDate": search_ymd
+    } for p in range(1, total_pages + 1)]
+
+    pages = fetch_pages_parallel(api_url(NURI_CNTRCT_LIST_PATH), params_list)
+
+    # 3) 결과 처리
+    buffer = []
+    for data in pages:
+        if not isinstance(data, dict):
+            continue
+        items = _as_items_list(_as_dict(data.get("response", {}).get("body")))
+        for it in items:
+            # ── 업무구분 필터 (물품만, 또는 필터 없이 전체) ──────────
+            bsns_div_nm = _as_text(it.get("bsnsDivNm"))
+            # 물품 외 업종도 키워드 매칭 후 통과하도록 허용
+            # (누리장터는 물품/용역/공사/기타 구분 — 필요시 아래 주석 해제로 물품만 수집)
+            # if bsns_div_nm and bsns_div_nm != "물품":
+            #     continue
+
+            # ── 계약명 / 텍스트 필터 ────────────────────────────────
+            title = _as_text(it.get("cntrctNm") or it.get("contNm"))
+            cntrct_instt_nm = _as_text(it.get("cntrctInsttNm"))
+            if not is_relevant_text(
+                title,
+                bsns_div_nm,
+                _as_text(it.get("itemNm") or it.get("prdctNm")),
+                cntrct_instt_nm,
+            ):
+                continue
+
+            # ── 기관 정보 ────────────────────────────────────────────
+            # 누리장터 민간계약: 수요자 = cntrctInsttCd / cntrctInsttNm
+            client_code = _as_text(it.get("cntrctInsttCd") or it.get("sttCd") or it.get("dmndInsttCd"))
+            client_name = cntrct_instt_nm or _as_text(it.get("insttNm") or it.get("dmndInsttNm")) or "기관명 없음"
+            mall_addr   = guess_mall_addr(it)
+
+            # ── API 문서 전체 필드 수집 ────────────────────────────────
+            unty_cntrct_no   = _as_text(it.get("untyCntrctNo"))           # 통합계약번호
+            dcsn_cntrct_no   = _as_text(it.get("dcsnCntrctNo"))           # 확정계약번호
+            cntrct_ref_no    = _as_text(it.get("cntrctRefNo"))            # 계약참조번호
+            cmmn_cntrct_yn   = _as_text(it.get("cmmnCntrctYn"))           # 공동계약여부(Y/N)
+            cntrct_date      = _as_text(it.get("cntrctCnclsDate"))        # 계약체결일자
+            cntrct_prd       = _as_text(it.get("cntrctPrd"))              # 계약기간
+            tot_cntrct_amt   = _as_text(it.get("totCntrctAmt"))           # 총계약금액
+            thmt_cntrct_amt  = _as_text(it.get("thtmCntrctAmt"))          # 금차계약금액
+            grntymny_rate    = _as_text(it.get("grntymnyRate"))           # 보증금률
+            dfct_grntymny    = _as_text(it.get("dfctGrntymnyRate"))       # 하자보증금률
+            cntrct_info_url  = _as_text(it.get("cntrctInfoUrl"))          # 계약정보URL
+            pay_div_nm       = _as_text(it.get("payDivNm"))               # 지급구분명
+            cntrct_instt_cd  = _as_text(it.get("cntrctInsttCd"))          # 계약기관코드(민간수요자코드)
+            cntrct_dept_nm   = _as_text(it.get("cntrctInsttChrgDeptNm"))  # 계약담당부서명
+            ofcl_nm          = _as_text(it.get("cntrctInsttOfclNm"))      # 계약담당자명
+            ofcl_tel         = _as_text(it.get("cntrctInsttOfclTelNo") or it.get("telNo") or it.get("cntrctInsttOfclTelno"))
+            ofcl_fax         = _as_text(it.get("cntrctInsttOfclFaxNo") or it.get("faxNo"))
+            crdtr_nm         = _as_text(it.get("crdtrNm"))                # 채권자명
+            cntrct_mthd_nm   = _as_text(it.get("cntrctCnclsMthdNm"))     # 계약체결방법명
+            rgst_dt          = _as_text(it.get("rgstDt"))                 # 등록일시
+            chg_dt           = _as_text(it.get("chgDt"))                  # 변경일시
+
+            # ── 업체목록(corpList) 파싱 ──────────────────────────────
+            corp_list = _parse_nuri_corp_list(_as_text(it.get("corpList")))
+            # 주계약업체명 추출 (참고용)
+            main_corp_nm = ""
+            for corp in corp_list:
+                if "주계약" in corp.get("corpDiv", "") or corp.get("seq") == "1":
+                    main_corp_nm = corp.get("corpNm", "")
+                    break
+
+            # ── 상세 URL ─────────────────────────────────────────────
+            detail_link = _as_text(it.get("cntrctDtlInfoUrl"))
+            if not detail_link and unty_cntrct_no:
+                detail_link = (
+                    f"https://www.g2b.go.kr:8067/contract/contDetail.jsp"
+                    f"?Union_number={unty_cntrct_no}"
+                )
+            if not detail_link and it.get("cnfrmCntrctNo"):
+                detail_link = (
+                    f"https://www.g2b.go.kr:8101/ep/tbid/privateCntrctDetail.do"
+                    f"?cnfrmCntrctNo={it.get('cnfrmCntrctNo')}"
+                )
+            if not detail_link and it.get("bidNtceNo"):
+                detail_link = (
+                    f"https://www.g2b.go.kr:8101/ep/tbid/privateBidPblancDetail.do"
+                    f"?bidNtceNo={it.get('bidNtceNo')}&bidNtceOrd=01"
+                )
+            if not detail_link and cntrct_info_url:
+                detail_link = cntrct_info_url
+
+            # ── 금액 결정 (금차계약금액 우선) ────────────────────────
+            amount_str = thmt_cntrct_amt or tot_cntrct_amt or it.get("cntrctAmt") or it.get("totAmt") or ""
+
+            # ── raw 데이터 보강 ───────────────────────────────────────
+            enriched_raw = dict(it)
+            enriched_raw["_corpList_parsed"] = corp_list
+            enriched_raw["_nuri_cntrct_meta"] = {
+                "untyCntrctNo":         unty_cntrct_no,
+                "dcsnCntrctNo":         dcsn_cntrct_no,
+                "cntrctRefNo":          cntrct_ref_no,
+                "bsnsDivNm":            bsns_div_nm,
+                "cmmnCntrctYn":         cmmn_cntrct_yn,
+                "cntrctCnclsDate":      cntrct_date,
+                "cntrctPrd":            cntrct_prd,
+                "totCntrctAmt":         tot_cntrct_amt,
+                "thtmCntrctAmt":        thmt_cntrct_amt,
+                "grntymnyRate":         grntymny_rate,
+                "dfctGrntymnyRate":     dfct_grntymny,
+                "payDivNm":             pay_div_nm,
+                "cntrctInsttCd":        cntrct_instt_cd,
+                "cntrctInsttNm":        client_name,
+                "cntrctChrgDeptNm":     cntrct_dept_nm,
+                "cntrctInsttOfclNm":    ofcl_nm,
+                "cntrctInsttOfclTelNo": ofcl_tel,
+                "cntrctInsttOfclFaxNo": ofcl_fax,
+                "crdtrNm":              crdtr_nm,
+                "cntrctCnclsMthdNm":   cntrct_mthd_nm,
+                "rgstDt":               rgst_dt,
+                "chgDt":                chg_dt,
+                "mainCorpNm":           main_corp_nm,
+            }
+
+            base = _build_base_notice(
+                "민간계약", bsns_div_nm or "물품", title, client_name,
+                ofcl_tel,
+                "계약 확인 필요", 0, amount_str, "확인필요",
+                to_ymd(cntrct_date or it.get("cntrctDate")),
+                detail_link,
+                source="NURI", raw=enriched_raw
+            )
+
+            # 담당자·팩스 Notice 필드에 직접 반영
+            if ofcl_nm:
+                base["manager_name"]  = ofcl_nm
+            if ofcl_tel:
+                base["manager_phone"] = ofcl_tel
+            if ofcl_fax:
+                base["client_fax"]    = ofcl_fax
+
+            n = expand_and_store_with_priority(base, client_code, mall_addr, client_name, save=False)
+            if n:
+                buffer.append(n)
+
+    # 4) 벌크 업서트
+    if buffer:
+        bulk_upsert_notices(buffer)
+        print(f"  [\u2705 일괄 저장] {len(buffer)}건")
+    else:
+        print("  - 관심 항목 없음")
+
 
 
 # --- 계약완료 ---
@@ -3040,7 +3616,7 @@ def fetch_and_process_contracts(search_ymd: str):
     print(f"\n--- [{to_ymd(search_ymd)}] 계약완료(나라장터) 수집 ---")
 
     start_dt = f"{search_ymd}0000"
-    end_dt = f"{search_ymd}2359"
+    end_dt   = f"{search_ymd}2359"
 
     # 1) 총건수 1회 조회
     first = http_get_json(api_url(CNTRCT_LIST_PATH), {
@@ -3048,14 +3624,13 @@ def fetch_and_process_contracts(search_ymd: str):
         "pageNo": "1", "numOfRows": "1",
         "inqryDiv": "1", "inqryBgnDt": start_dt, "inqryEndDt": end_dt
     })
-    body = _as_dict(first.get("response", {}).get("body"))
+    body  = _as_dict(first.get("response", {}).get("body"))
     total = int(body.get("totalCount", 0))
     if total == 0:
         print("  - 데이터 없음"); return
 
     page_size   = 100
     total_pages = (total + page_size - 1) // page_size
-    #print(f"  - 총 {total}건 / {total_pages}p")
     print(f"  - 총 {total}건")
 
     # 2) 파라미터 묶음 생성 후 병렬 조회
@@ -3067,52 +3642,188 @@ def fetch_and_process_contracts(search_ymd: str):
 
     pages = fetch_pages_parallel(api_url(CNTRCT_LIST_PATH), params_list)
 
+    # ── 수요기관목록(dminsttList) 파싱 ──────────────────────────────────
+    def _parse_dminstt_list(raw_str: str) -> list:
+        """
+        '[순번^수요기관코드^수요기관명^소관구분^담당부서명^담당자성명^담당자전화번호],...'
+        -> list of dict
+        """
+        if not raw_str:
+            return []
+        results = []
+        blocks = re.findall(r"\[([^\]]*)\]", raw_str)
+        for blk in blocks:
+            parts = blk.split("^")
+            results.append({
+                "seq":     parts[0] if len(parts) > 0 else "",
+                "instCd":  parts[1] if len(parts) > 1 else "",
+                "instNm":  parts[2] if len(parts) > 2 else "",
+                "jrsdctn": parts[3] if len(parts) > 3 else "",
+                "deptNm":  parts[4] if len(parts) > 4 else "",
+                "ofclNm":  parts[5] if len(parts) > 5 else "",
+                "telNo":   parts[6] if len(parts) > 6 else "",
+            })
+        return results
+
+    # ── 업체목록(corpList) 파싱 ─────────────────────────────────────────
+    def _parse_corp_list(raw_str: str) -> list:
+        """
+        '[순번^업체구분^공동도급방식구분^업체명^대표자명^국적명^지분율^채권자명^담당자성명^사업자등록번호],...'
+        -> list of dict
+        """
+        if not raw_str:
+            return []
+        results = []
+        blocks = re.findall(r"\[([^\]]*)\]", raw_str)
+        for blk in blocks:
+            parts = blk.split("^")
+            results.append({
+                "seq":           parts[0] if len(parts) > 0 else "",
+                "corpDiv":       parts[1] if len(parts) > 1 else "",
+                "jntContrDiv":   parts[2] if len(parts) > 2 else "",
+                "corpNm":        parts[3] if len(parts) > 3 else "",
+                "rprsntvNm":     parts[4] if len(parts) > 4 else "",
+                "nationNm":      parts[5] if len(parts) > 5 else "",
+                "shareRate":     parts[6] if len(parts) > 6 else "",
+                "bondClaimerNm": parts[7] if len(parts) > 7 else "",
+                "mgrNm":         parts[8] if len(parts) > 8 else "",
+                "bizRegNo":      parts[9] if len(parts) > 9 else "",
+            })
+        return results
+
     # 3) 페이지 결과 처리 (벌크업서트용 버퍼)
     buffer = []
     for data in pages:
         items = _as_items_list(_as_dict(data.get("response", {}).get("body")))
         for it in items:
-            title = it.get("cntrctNm", "") or it.get("contNm","")
-            if not is_relevant_text(title,
-                                    _as_text(it.get("bsnsDivNm")),
-                                    _as_text(it.get("itemNm") or it.get("prdctNm")),
-                                    _as_text(it.get("dminsttNm") or it.get("dmndInsttNm"))):
+            # ── 기본 텍스트 필터 ────────────────────────────────────────
+            title = it.get("cntrctNm", "") or it.get("contNm", "")
+            if not is_relevant_text(
+                title,
+                _as_text(it.get("bsnsDivNm")),
+                _as_text(it.get("itemNm") or it.get("prdctNm")),
+                _as_text(it.get("dminsttNm") or it.get("dmndInsttNm")),
+            ):
                 continue
 
-            dm_cd = it.get("dminsttCd") or it.get("dmndInsttCd")
-            cn_cd = it.get("cntrctInsttCd") or it.get("insttCd")
+            # ── 기관 코드/명 ────────────────────────────────────────────
+            dm_cd       = it.get("dminsttCd") or it.get("dmndInsttCd")
+            cn_cd       = it.get("cntrctInsttCd") or it.get("insttCd")
             client_code = dm_cd or cn_cd
-            client_name = it.get("dminsttNm") or it.get("dmndInsttNm") or it.get("cntrctInsttNm") or it.get("insttNm") or "기관명 없음"
+            client_name = (
+                it.get("dminsttNm") or it.get("dmndInsttNm")
+                or it.get("cntrctInsttNm") or it.get("insttNm") or "기관명 없음"
+            )
             mall_addr = guess_mall_addr(it)
 
+            # ── 계약 상세 필드 (API 문서 전체 항목) ─────────────────────
+            unty_cntrct_no  = _as_text(it.get("untyCntrctNo"))           # 통합계약번호
+            dcsn_cntrct_no  = _as_text(it.get("dcsnCntrctNo"))           # 확정계약번호
+            cntrct_ref_no   = _as_text(it.get("cntrctRefNo"))            # 계약참조번호
+            bsns_div_nm     = _as_text(it.get("bsnsDivNm"))              # 업무구분명
+            cmmn_cntrct_yn  = _as_text(it.get("cmmnCntrctYn"))           # 공동계약여부
+            lngrm_ctnu_div  = _as_text(it.get("lngtrmCtnuDivNm"))        # 장기계속구분명
+            cntrct_date     = _as_text(it.get("cntrctCnclsDate"))        # 계약체결일자
+            cntrct_prd      = _as_text(it.get("cntrctPrd"))              # 계약기간
+            base_law_nm     = _as_text(it.get("baseLawNm"))              # 근거법률명
+            tot_amt         = _as_text(it.get("totCntrctAmt"))           # 총계약금액
+            thmt_amt        = _as_text(it.get("thtmCntrctAmt"))          # 금차계약금액
+            grntymny_rate   = _as_text(it.get("grntymnyRate"))           # 보증금률
+            cntrct_info_url = _as_text(it.get("cntrctInfoUrl"))          # 계약정보URL
+            pay_div_nm      = _as_text(it.get("payDivNm"))               # 지급구분명
+            req_no          = _as_text(it.get("reqNo"))                  # 요청번호
+            ntce_no         = _as_text(it.get("ntceNo"))                 # 공고번호
+            cntrct_instt_cd = _as_text(it.get("cntrctInsttCd"))          # 계약기관코드
+            cntrct_instt_nm = _as_text(it.get("cntrctInsttNm"))          # 계약기관명
+            cntrct_jrsdctn  = _as_text(it.get("cntrctInsttJrsdctnDivNm"))# 계약기관소관구분명
+            cntrct_dept_nm  = _as_text(it.get("cntrctInsttChrgDeptNm"))  # 계약기관담당부서명
+
+            # ── 담당자 정보 (단순 필드 우선) ────────────────────────────
+            ofcl_nm  = _as_text(it.get("cntrctInsttOfclNm")  or it.get("insttOfclNm"))
+            ofcl_tel = _as_text(it.get("cntrctInsttOfclTelNo") or it.get("telNo") or it.get("cntrctInsttOfclTelno"))
+            ofcl_fax = _as_text(it.get("cntrctInsttOfclFaxNo") or it.get("faxNo"))
+
+            # ── 수요기관목록 파싱 → 담당자 보강 ─────────────────────────
+            dminstt_list = _parse_dminstt_list(_as_text(it.get("dminsttList")))
+            if dminstt_list:
+                first_dm = dminstt_list[0]
+                ofcl_nm  = ofcl_nm  or _as_text(first_dm.get("ofclNm"))
+                ofcl_tel = ofcl_tel or _as_text(first_dm.get("telNo"))
+
+            # ── 업체목록 파싱 (raw_data 보강용) ────────────────────────
+            corp_list = _parse_corp_list(_as_text(it.get("corpList")))
+
+            # ── 상세 URL ────────────────────────────────────────────────
             detail_link = it.get("cntrctDtlInfoUrl") or ""
-            if not detail_link:
-                unty_cntrct_no = it.get('untyCntrctNo')
-                if unty_cntrct_no:
-                    detail_link = f"https://www.g2b.go.kr:8067/contract/contDetail.jsp?Union_number={unty_cntrct_no}"
+            if not detail_link and unty_cntrct_no:
+                detail_link = (
+                    f"https://www.g2b.go.kr:8101/ep/tbid/cntrctDtlInfo.do"
+                    f"?untyCntrctNo={unty_cntrct_no}"
+                )
+            if not detail_link and cntrct_info_url:
+                detail_link = cntrct_info_url
+            shop_link = construct_shop_g2b_link(it)
+            if shop_link and not detail_link:
+                detail_link = shop_link
+
+            # ── 금액 결정 ───────────────────────────────────────────────
+            amount_str = thmt_amt or it.get("cntrctAmt") or it.get("totAmt") or ""
+
+            # ── raw 데이터에 파싱된 목록 병합 ───────────────────────────
+            import json as _json
+            enriched_raw = dict(it)
+            enriched_raw["_dminsttList_parsed"] = dminstt_list
+            enriched_raw["_corpList_parsed"]    = corp_list
+            enriched_raw["_cntrct_meta"] = {
+                "untyCntrctNo":         unty_cntrct_no,
+                "dcsnCntrctNo":         dcsn_cntrct_no,
+                "cntrctRefNo":          cntrct_ref_no,
+                "bsnsDivNm":            bsns_div_nm,
+                "cmmnCntrctYn":         cmmn_cntrct_yn,
+                "lngtrmCtnuDivNm":      lngrm_ctnu_div,
+                "cntrctCnclsDate":      cntrct_date,
+                "cntrctPrd":            cntrct_prd,
+                "baseLawNm":            base_law_nm,
+                "totCntrctAmt":         tot_amt,
+                "thtmCntrctAmt":        thmt_amt,
+                "grntymnyRate":         grntymny_rate,
+                "payDivNm":             pay_div_nm,
+                "reqNo":                req_no,
+                "ntceNo":               ntce_no,
+                "cntrctInsttCd":        cntrct_instt_cd,
+                "cntrctInsttNm":        cntrct_instt_nm,
+                "cntrctJrsdctnDivNm":   cntrct_jrsdctn,
+                "cntrctChrgDeptNm":     cntrct_dept_nm,
+                "cntrctInsttOfclNm":    ofcl_nm,
+                "cntrctInsttOfclTelNo": ofcl_tel,
+                "cntrctInsttOfclFaxNo": ofcl_fax,
+            }
 
             base = _build_base_notice(
-                "계약완료", "물품", title, client_name,
-                it.get("cntrctInsttOfclTelNo", "") or it.get("telNo", ""),
-                "계약 확인 필요", 0,
-                it.get("cntrctAmt") or it.get("totAmt") or "",
-                "확인필요",
-                to_ymd(it.get("cntrctCnclsDate") or it.get("cntrctDate") or it.get("contDate")),
-                detail_link
+                "계약완료", bsns_div_nm or "물품", title, client_name,
+                ofcl_tel,
+                "계약 확인 필요", 0, amount_str, "확인필요",
+                to_ymd(cntrct_date or it.get("cntrctDate") or it.get("contDate")),
+                detail_link, raw=enriched_raw
             )
-            # 주소/관할 결정은 expand_and_store_with_priority에서 진행
-            # → 벌크업서트를 위해 즉시 DB쓰지 말고 notice dict 자체를 모읍니다.
-            # expand_and_store_with_priority 내부가 즉시 upsert/commit 구조라면,
-            # '저장' 대신 '확정된 n dict'를 반환하도록 얇게 래핑해 버퍼에 추가하는 방식 권장
-            n = finalize_notice_dict(base, client_code, mall_addr, client_name)  # 아래 B에서 제공
-            if n: buffer.append(n)
+
+            # 담당자·팩스 Notice 필드에 직접 반영
+            if ofcl_nm:
+                base["manager_name"]  = ofcl_nm
+            if ofcl_tel:
+                base["manager_phone"] = ofcl_tel
+            if ofcl_fax:
+                base["client_fax"]    = ofcl_fax
+
+            # 주소/관할 결정
+            n = finalize_notice_dict(base, client_code, mall_addr, client_name)
+            if n:
+                buffer.append(n)
 
     # 4) 벌크 업서트
     if buffer:
         bulk_upsert_notices(buffer)
-        print(f"  [✅ 일괄 저장] {len(buffer)}건")
-
-
+        print(f"  [\u2705 일괄 저장] {len(buffer)}건")
 
 
 
@@ -3181,13 +3892,13 @@ def fetch_and_process_delivery_requests(search_ymd: str):
                     continue
 
                 dminstt_raw = it.get("dminsttInfo") or it.get("dmndInsttInfo") or ""
-                dm_cd, dm_nm = parse_dminstt_code_from_complex(dminstt_raw)
+                dm_cd, dm_nm, dm_phone = parse_dminstt_code_from_complex(dminstt_raw)
                 meta_by_req[req_no] = {
                     "req_nm": req_nm,
                     "client_code": dm_cd,
                     "client_name": dm_nm or it.get("dmndInsttNm") or it.get("dminsttNm") or "기관명 없음",
                     "mall_addr": guess_mall_addr(it),
-                    "tel": it.get("cntrctDeptTelNo") or it.get("telNo") or "",
+                    "tel": dm_phone or it.get("cntrctDeptTelNo") or it.get("telNo") or "",
                     "rcpt": to_ymd(it.get("rcptDate") or it.get("dlvrReqRcptDate")),
                     "hdr_qty": _to_int(it.get("dlvrReqQty") or it.get("reqQty") or it.get("totQty")),
                     "hdr_amt": _to_int(it.get("dlvrReqAmt")),
@@ -3276,7 +3987,8 @@ def fetch_and_process_delivery_requests(search_ymd: str):
                 base = _build_base_notice(
                     "납품요구", "물품", meta["req_nm"], meta["client_name"],
                     meta["tel"], model_name, qty, amt,
-                    certification_status, meta["rcpt"], f"dlvrreq:{req_no}"
+                    certification_status, meta["rcpt"], f"dlvrreq:{req_no}",
+                    raw={**meta, **product}
                 )
                 n = expand_and_store_with_priority(
                     base, meta["client_code"], meta["mall_addr"], meta["client_name"], save=False
@@ -3288,7 +4000,7 @@ def fetch_and_process_delivery_requests(search_ymd: str):
                 "납품요구", "물품", meta["req_nm"], meta["client_name"],
                 meta["tel"], "세부내역 미확인",
                 meta["hdr_qty"], str(meta["hdr_amt"]),  # 문자열로
-                "확인필요", meta["rcpt"], f"dlvrreq:{req_no}"
+                "확인필요", meta["rcpt"], f"dlvrreq:{req_no}", raw=meta
             )
             n = expand_and_store_with_priority(
                 base, meta["client_code"], meta["mall_addr"], meta["client_name"], save=False
@@ -3381,6 +4093,9 @@ STAGES_CONFIG = {
     "kapt_bid":   {"name": "입찰공고(K-APT)", "func": fetch_and_process_kapt_bids},
     "kapt_result":{"name": "입찰결과(K-APT)", "func": fetch_and_process_kapt_bid_results},
     "kapt_private":{"name":"수의계약(K-APT)", "func": fetch_and_process_kapt_private_contracts},
+    "nuri_bid":   {"name": "민간입찰(누리장터)", "func": fetch_and_process_nuri_bids},
+    "nuri_result":{"name": "민간낙찰(누리장터)", "func": fetch_and_process_nuri_success_bids},
+    "nuri_contract":{"name": "민간계약(누리장터)", "func": fetch_and_process_nuri_contracts},
 }
 
 # ↓↓↓ 추가: 실행 대상에서 스킵값(True)인 키 제거
@@ -3430,6 +4145,11 @@ if __name__ == "__main__":
     fetch_and_process_kapt_bids(search_date)
     # fetch_and_process_kapt_private_contracts(search_date)   # 수의계약 (스킵)
     fetch_and_process_kapt_bid_results(search_date)
+
+    print("\n--- 민간입찰(누리장터) 데이터 수집 ---")
+    fetch_and_process_nuri_bids(search_date)
+    fetch_and_process_nuri_success_bids(search_date)
+    fetch_and_process_nuri_contracts(search_date)
 
     print(f"\n>>> 수집 완료!")
     

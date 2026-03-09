@@ -1,0 +1,7 @@
+requests
+sqlalchemy
+pandas
+psycopg2-binary
+python-dotenv
+googlegenai
+openai

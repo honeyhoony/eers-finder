@@ -81,12 +81,29 @@ CREATE POLICY "Admins can insert notices" ON public.notices
   );
 
 -- ── 6. profiles RLS 업데이트 ──
+-- 모든 인증된 사용자는 자신의 프로필을 읽을 수 있어야 함
+DROP POLICY IF EXISTS "Users can view own profile" ON public.profiles;
+CREATE POLICY "Users can view own profile" ON public.profiles
+  FOR SELECT USING (auth.uid() = id);
+
+-- 관리자는 모든 프로필 읽기 가능
+DROP POLICY IF EXISTS "Admins can view all profiles" ON public.profiles;
+CREATE POLICY "Admins can view all profiles" ON public.profiles
+  FOR SELECT USING (
+    (SELECT role FROM public.profiles WHERE id = auth.uid()) IN ('S', 'A')
+  );
+
 DROP POLICY IF EXISTS "Admin can update any profile." ON public.profiles;
 CREATE POLICY "Admin can update any profile." ON public.profiles
   FOR UPDATE USING (
     auth.uid() = id OR
     (SELECT role FROM public.profiles WHERE id = auth.uid()) = 'S'
   );
+
+-- 신규 가입 시 upsert 가능하도록 INSERT 정책 추가
+DROP POLICY IF EXISTS "Users can insert own profile" ON public.profiles;
+CREATE POLICY "Users can insert own profile" ON public.profiles
+  FOR INSERT WITH CHECK (auth.uid() = id);
 
 -- S급만 A급 지정 가능 (application level에서도 체크)
 DROP POLICY IF EXISTS "S admin can set A role" ON public.profiles;
@@ -99,15 +116,23 @@ CREATE POLICY "S admin can set A role" ON public.profiles
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS trigger AS $$
 BEGIN
-  INSERT INTO public.profiles (id, email, name, role, is_admin)
+  INSERT INTO public.profiles (id, email, name, phone, hq, office, role, is_admin)
   VALUES (
     NEW.id,
     NEW.email,
     COALESCE(NEW.raw_user_meta_data->>'name', split_part(NEW.email, '@', 1)),
+    NEW.raw_user_meta_data->>'phone',
+    NEW.raw_user_meta_data->>'hq',
+    NEW.raw_user_meta_data->>'office',
     CASE WHEN NEW.email = 'jeon.bh@kepco.co.kr' THEN 'S' ELSE 'B' END,
     CASE WHEN NEW.email = 'jeon.bh@kepco.co.kr' THEN true ELSE false END
   )
-  ON CONFLICT (id) DO NOTHING;
+  ON CONFLICT (id) DO UPDATE SET
+    email = EXCLUDED.email,
+    name = COALESCE(EXCLUDED.name, profiles.name),
+    phone = COALESCE(EXCLUDED.phone, profiles.phone),
+    hq = COALESCE(EXCLUDED.hq, profiles.hq),
+    office = COALESCE(EXCLUDED.office, profiles.office);
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;

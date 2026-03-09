@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "EERS AI 파인더 | 한국전력 실적 향상 지능형 플랫폼",
+  title: "EERS Bid 알리미 | 한전 업무 담당자 전용 시스템",
   description: "AI 기반 나라장터/K-APT 입찰 데이터 자동 분석 및 KEPCO 고효율 기기 잠재고객 선제 발굴 시스템",
 };
 

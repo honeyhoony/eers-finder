@@ -55,27 +55,46 @@ jobs:
               fetch_and_process_delivery_requests,
               fetch_and_process_kapt_bids,
               fetch_and_process_kapt_bid_results,
+              fetch_and_process_kapt_private_contracts,
+              fetch_and_process_nuri_bids,
+              fetch_and_process_nuri_success_bids,
+              fetch_and_process_nuri_contracts,
           )
 
           target = os.environ.get("TARGET_DATE", "").strip()
           
           dates_to_run = []
           if "-" in target:
-              start_str, end_str = target.split("-")
-              start_date = datetime.strptime(start_str, "%Y%m%d")
-              end_date = datetime.strptime(end_str, "%Y%m%d")
-              delta = end_date - start_date
-              dates_to_run = [(start_date + timedelta(days=i)).strftime("%Y%m%d") for i in range(delta.days + 1)]
+              parts = target.split("-")
+              if len(parts) == 2 and len(parts[0]) == 8 and len(parts[1]) == 8:
+                  start_date = datetime.strptime(parts[0], "%Y%m%d")
+                  end_date = datetime.strptime(parts[1], "%Y%m%d")
+                  delta = end_date - start_date
+                  dates_to_run = [(start_date + timedelta(days=i)).strftime("%Y%m%d") for i in range(delta.days + 1)]
+              else:
+                  dates_to_run = [target if target else datetime.now().strftime("%Y%m%d")]
           else:
               dates_to_run = [target if target else datetime.now().strftime("%Y%m%d")]
 
           for search_date in dates_to_run:
-              print(f"=== EERS 데이터 수집 시작: {search_date} ===")
+              print(f"\n{'='*50}")
+              print(f"EERS 데이터 수집 시작: {search_date}")
+              print(f"{'='*50}")
+              
+              print("\n1. 나라장터(G2B)")
               fetch_and_process_bid_notices(search_date)
               fetch_and_process_contracts(search_date)
               fetch_and_process_delivery_requests(search_date)
+              
+              print("\n2. 공동주택(K-APT)")
               fetch_and_process_kapt_bids(search_date)
               fetch_and_process_kapt_bid_results(search_date)
+              # fetch_and_process_kapt_private_contracts(search_date) # 필요시 해제
 
-          print("=== 수집 완료! ===")
+              print("\n3. 누리장터(민간)")
+              fetch_and_process_nuri_bids(search_date)
+              fetch_and_process_nuri_success_bids(search_date)
+              fetch_and_process_nuri_contracts(search_date)
+
+          print("\n=== 모든 날짜 수집 완료! ===")
           PYEOF

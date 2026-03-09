@@ -101,6 +101,14 @@ class Notice(Base):
     ai_suitability_score  = Column(Integer, default=0)       # 적합도 점수 (0~100)
     ai_suitability_reason = Column(String, default="")       # 적합도 이유
     ai_call_tips          = Column(String, default="")       # 담당자 안내 멘트/팁
+    ai_keywords           = Column(String, default="")       # 추출 키워드 (쉼표 구분)
+    manager_name          = Column(String, nullable=True)
+    manager_email         = Column(String, nullable=True)
+    manager_phone         = Column(String, nullable=True)
+    followup_at           = Column(DateTime, nullable=True)
+    client_fax            = Column(String, nullable=True)
+    client_url            = Column(String, nullable=True)
+    raw_data              = Column(String, default="{}")     # 원본 API 응답 데이터 (JSON 문자열)
 
     __table_args__ = (
         UniqueConstraint("source_system", "detail_link", "model_name", "assigned_office",
@@ -220,24 +228,64 @@ with engine.begin() as conn:
                 except Exception as e:
                     print(f"[migrate] failed to add column {col_name}: {e}")
         else:
-            # Postgres: check information_schema
-            query = text(f"""
-                SELECT column_name 
-                FROM information_schema.columns 
-                WHERE table_name = :t AND column_name = :c
+            # Postgres: check information_schema with more robust logic
+            # Using DO block to avoid multiple ALTER TABLE attempts if columns exist
+            conn.exec_driver_sql(f"""
+                DO $$ 
+                BEGIN 
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = '{table_name}' AND column_name = 'ai_suitability_score') THEN 
+                        ALTER TABLE {table_name} ADD COLUMN ai_suitability_score INTEGER DEFAULT 0; 
+                    END IF;
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = '{table_name}' AND column_name = 'ai_suitability_reason') THEN 
+                        ALTER TABLE {table_name} ADD COLUMN ai_suitability_reason TEXT DEFAULT ''; 
+                    END IF;
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = '{table_name}' AND column_name = 'ai_call_tips') THEN 
+                        ALTER TABLE {table_name} ADD COLUMN ai_call_tips TEXT DEFAULT ''; 
+                    END IF;
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = '{table_name}' AND column_name = 'ai_keywords') THEN 
+                        ALTER TABLE {table_name} ADD COLUMN ai_keywords TEXT DEFAULT ''; 
+                    END IF;
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = '{table_name}' AND column_name = 'assigned_hq') THEN 
+                        ALTER TABLE {table_name} ADD COLUMN assigned_hq VARCHAR(255) DEFAULT '본부확인요망'; 
+                    END IF;
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = '{table_name}' AND column_name = 'raw_data') THEN 
+                        ALTER TABLE {table_name} ADD COLUMN raw_data TEXT DEFAULT '{{}}'; 
+                    END IF;
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = '{table_name}' AND column_name = 'manager_name') THEN 
+                        ALTER TABLE {table_name} ADD COLUMN manager_name TEXT; 
+                    END IF;
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = '{table_name}' AND column_name = 'manager_email') THEN 
+                        ALTER TABLE {table_name} ADD COLUMN manager_email TEXT; 
+                    END IF;
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = '{table_name}' AND column_name = 'manager_phone') THEN 
+                        ALTER TABLE {table_name} ADD COLUMN manager_phone TEXT; 
+                    END IF;
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = '{table_name}' AND column_name = 'followup_at') THEN 
+                        ALTER TABLE {table_name} ADD COLUMN followup_at TIMESTAMP; 
+                    END IF;
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = '{table_name}' AND column_name = 'client_fax') THEN 
+                        ALTER TABLE {table_name} ADD COLUMN client_fax TEXT; 
+                    END IF;
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = '{table_name}' AND column_name = 'client_url') THEN 
+                        ALTER TABLE {table_name} ADD COLUMN client_url TEXT; 
+                    END IF;
+                END $$;
             """)
-            res = conn.execute(query, {"t": table_name, "c": col_name}).fetchone()
-            if not res:
-                try:
-                    conn.exec_driver_sql(f"ALTER TABLE {table_name} ADD COLUMN {col_name} {col_type_sql}")
-                    print(f"[migrate] (postgres) added column {table_name}.{col_name}")
-                except Exception as e:
-                    print(f"[migrate] (postgres) failed to add column {col_name}: {e}")
 
+    # Note: For Postgres, any one call will add all columns if missing.
+    # For SQLite, each call is needed.
     _add_column_if_not_exists(conn, "notices", "ai_suitability_score", "INTEGER DEFAULT 0")
     _add_column_if_not_exists(conn, "notices", "ai_suitability_reason", "TEXT DEFAULT ''")
     _add_column_if_not_exists(conn, "notices", "ai_call_tips", "TEXT DEFAULT ''")
+    _add_column_if_not_exists(conn, "notices", "ai_keywords", "TEXT DEFAULT ''")
     _add_column_if_not_exists(conn, "notices", "assigned_hq", "VARCHAR(255) DEFAULT '본부확인요망'")
+    _add_column_if_not_exists(conn, "notices", "raw_data", "TEXT DEFAULT '{}'")
+    _add_column_if_not_exists(conn, "notices", "manager_name", "TEXT")
+    _add_column_if_not_exists(conn, "notices", "manager_email", "TEXT")
+    _add_column_if_not_exists(conn, "notices", "manager_phone", "TEXT")
+    _add_column_if_not_exists(conn, "notices", "followup_at", "TIMESTAMP")
+    _add_column_if_not_exists(conn, "notices", "client_fax", "TEXT")
+    _add_column_if_not_exists(conn, "notices", "client_url", "TEXT")
 
 # ─────────────────────────────────────────
 # 4) (선택) KEA 모델 캐시 유틸 — 중복 제거 버전

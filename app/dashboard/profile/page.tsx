@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { createClient } from "@/utils/supabase/client";
-import { Heart, User, Phone, Mail, Bell, ArrowLeft, Save, Check } from "lucide-react";
+import { Heart, User, Phone, Mail, Bell, ArrowLeft, Save, Check, LayoutGrid, List, Building } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion } from "framer-motion";
@@ -12,6 +12,8 @@ type Profile = {
   email: string;
   name: string | null;
   phone: string | null;
+  hq: string | null;
+  office: string | null;
   is_admin: boolean;
 };
 
@@ -38,6 +40,8 @@ export default function ProfilePage() {
   const [tab, setTab] = useState<"profile" | "favorites">("profile");
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
+  const [pushEnabled, setPushEnabled] = useState(true);
+  const [viewMode, setViewMode] = useState<"card" | "list">("card");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -55,13 +59,29 @@ export default function ProfilePage() {
         setPhone(p.phone || "");
       }
 
-      // 관심 공고 로드
+      // 관심 공고 로드 (user_favorites 테이블 기반으로 변경)
       const { data: f } = await supabase
-        .from("notices")
-        .select("id, source_system, project_name, client, biz_type, amount, notice_date, assigned_hq, assigned_office, phone_number, is_favorite")
-        .eq("is_favorite", true)
-        .order("notice_date", { ascending: false });
-      if (f) setFavs(f as FavNotice[]);
+        .from("user_favorites")
+        .select(`
+          status, updated_at,
+          notice:notices(id, source_system, project_name, client, biz_type, amount, notice_date, assigned_hq, assigned_office, phone_number)
+        `)
+        .eq("user_id", user.id)
+        .order("updated_at", { ascending: false });
+      
+      if (f) {
+        // Flatten the join result to Match FavNotice type
+        const flattened = f.map((item: any) => ({
+          ...item.notice,
+          is_favorite: true,
+          status: item.status
+        }));
+        setFavs(flattened);
+      }
+
+      // 뷰 모드 로드
+      const storedViewMode = localStorage.getItem("dashboardViewMode");
+      if (storedViewMode === "list") setViewMode("list");
 
       setLoading(false);
     };
@@ -71,15 +91,17 @@ export default function ProfilePage() {
   const handleSave = async () => {
     if (!profile) return;
     setSaving(true);
-    await supabase.from("profiles").update({ name, phone }).eq("id", profile.id);
+    await supabase.from("profiles").update({ name, phone, push_enabled: pushEnabled }).eq("id", profile.id);
     setSaving(false);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
 
-  const removeFav = async (id: number) => {
-    await supabase.from("notices").update({ is_favorite: false }).eq("id", id);
-    setFavs(prev => prev.filter(f => f.id !== id));
+  const removeFav = async (noticeId: number) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    await supabase.from("user_favorites").delete().match({ user_id: user.id, notice_id: noticeId });
+    setFavs(prev => prev.filter(f => f.id !== noticeId));
   };
 
   const fmtAmount = (v: string | null) => {
@@ -132,7 +154,15 @@ export default function ProfilePage() {
 
           <div style={{ marginBottom: "1.25rem" }}>
             <label style={{ fontSize: "0.8rem", color: "var(--text-muted)", display: "block", marginBottom: "0.4rem" }}>
-              <Mail size={12} style={{ display: "inline", marginRight: "4px" }} /> 이메일 (변경 불가)
+              <Building size={12} style={{ display: "inline", marginRight: "4px" }} /> 소속
+            </label>
+            <input value={`${profile?.hq || ""} ${profile?.office || ""}`.trim()} readOnly
+              style={{ width: "100%", padding: "0.6rem 0.8rem", borderRadius: "8px", background: "rgba(0,0,0,0.2)", border: "1px solid var(--surface-border)", color: "var(--text-muted)", fontSize: "0.9rem" }} />
+          </div>
+
+          <div style={{ marginBottom: "1.25rem" }}>
+            <label style={{ fontSize: "0.8rem", color: "var(--text-muted)", display: "block", marginBottom: "0.4rem" }}>
+              <Mail size={12} style={{ display: "inline", marginRight: "4px" }} /> 이메일
             </label>
             <input value={profile?.email || ""} readOnly
               style={{ width: "100%", padding: "0.6rem 0.8rem", borderRadius: "8px", background: "rgba(0,0,0,0.2)", border: "1px solid var(--surface-border)", color: "var(--text-muted)", fontSize: "0.9rem" }} />
@@ -142,29 +172,66 @@ export default function ProfilePage() {
             <label style={{ fontSize: "0.8rem", color: "var(--text-muted)", display: "block", marginBottom: "0.4rem" }}>
               <User size={12} style={{ display: "inline", marginRight: "4px" }} /> 이름
             </label>
-            <input value={name} onChange={e => setName(e.target.value)} placeholder="홍길동"
-              style={{ width: "100%", padding: "0.6rem 0.8rem", borderRadius: "8px", background: "rgba(0,0,0,0.3)", border: "1px solid var(--surface-border)", color: "white", fontSize: "0.9rem" }} />
+            <input value={name} readOnly placeholder="홍길동"
+              style={{ width: "100%", padding: "0.6rem 0.8rem", borderRadius: "8px", background: "rgba(0,0,0,0.2)", border: "1px solid var(--surface-border)", color: "var(--text-muted)", fontSize: "0.9rem" }} />
           </div>
 
           <div style={{ marginBottom: "1.5rem" }}>
             <label style={{ fontSize: "0.8rem", color: "var(--text-muted)", display: "block", marginBottom: "0.4rem" }}>
               <Phone size={12} style={{ display: "inline", marginRight: "4px" }} /> 휴대폰 번호
-              <span style={{ color: "var(--brand-primary)", marginLeft: "0.4rem", fontSize: "0.75rem" }}>(추후 푸시 알림 발송용)</span>
             </label>
-            <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="010-1234-5678" type="tel"
-              style={{ width: "100%", padding: "0.6rem 0.8rem", borderRadius: "8px", background: "rgba(0,0,0,0.3)", border: "1px solid var(--surface-border)", color: "white", fontSize: "0.9rem" }} />
+            <input value={phone} readOnly placeholder="010-1234-5678" type="tel"
+              style={{ width: "100%", padding: "0.6rem 0.8rem", borderRadius: "8px", background: "rgba(0,0,0,0.2)", border: "1px solid var(--surface-border)", color: "var(--text-muted)", fontSize: "0.9rem" }} />
           </div>
 
-          {/* 알림 설정 (UI만) */}
-          <div style={{ padding: "1rem", borderRadius: "10px", background: "rgba(255,255,255,0.03)", border: "1px solid var(--surface-border)", marginBottom: "1.5rem" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.5rem" }}>
-              <Bell size={16} color="var(--brand-secondary)" />
-              <span style={{ fontSize: "0.9rem", fontWeight: "600" }}>푸시 알림 설정</span>
-              <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", background: "rgba(255,255,255,0.08)", padding: "0.15rem 0.5rem", borderRadius: "4px" }}>준비중</span>
+          {/* 알림 설정 */}
+          <div style={{ padding: "1rem", borderRadius: "10px", background: "rgba(255,255,255,0.03)", border: "1px solid var(--surface-border)", marginBottom: "1.5rem", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.3rem" }}>
+                <Bell size={16} color="var(--brand-secondary)" />
+                <span style={{ fontSize: "0.9rem", fontWeight: "600" }}>푸시 알림 수신 동의</span>
+              </div>
+              <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", margin: 0 }}>
+                매일 오전 새 공고 수집 후 SMS/푸시 알림을 받습니다.
+              </p>
             </div>
-            <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", margin: 0 }}>
-              휴대폰 번호를 등록하시면 매일 오전 새 공고 수집 후 SMS/푸시 알림을 받을 수 있습니다.
-            </p>
+            
+            {/* Toggle Switch */}
+            <div onClick={() => setPushEnabled(!pushEnabled)} style={{ 
+              width: "44px", height: "24px", borderRadius: "12px", background: pushEnabled ? "#10b981" : "rgba(255,255,255,0.1)", 
+              position: "relative", cursor: "pointer", transition: "all 0.3s" 
+            }}>
+              <div style={{ 
+                width: "20px", height: "20px", borderRadius: "50%", background: "white", 
+                position: "absolute", top: "2px", left: pushEnabled ? "22px" : "2px", transition: "all 0.3s", boxShadow: "0 2px 4px rgba(0,0,0,0.2)"
+              }} />
+            </div>
+          </div>
+
+          {/* View Mode 설정 */}
+          <div style={{ padding: "1rem", borderRadius: "10px", background: "rgba(255,255,255,0.03)", border: "1px solid var(--surface-border)", marginBottom: "1.5rem" }}>
+            <div style={{ marginBottom: "0.8rem" }}>
+              <span style={{ fontSize: "0.9rem", fontWeight: "600", display: "flex", alignItems: "center", gap: "0.5rem" }}><LayoutGrid size={16} color="var(--brand-primary)" /> 대시보드 뷰 모드 설정</span>
+              <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", margin: "0.3rem 0 0 0" }}>
+                메인 대시보드에서 공고를 볼 때 카드 형태 또는 목록 형태로 표시합니다.
+              </p>
+            </div>
+            <div style={{ display: "flex", gap: "0.5rem" }}>
+              <button onClick={() => { setViewMode("card"); localStorage.setItem("dashboardViewMode", "card"); }}
+                style={{ flex: 1, padding: "0.6rem", borderRadius: "8px", fontSize: "0.85rem", fontWeight: "700", display: "flex", alignItems: "center", justifyContent: "center", gap: "0.4rem",
+                  background: viewMode === "card" ? "rgba(16,185,129,0.15)" : "rgba(255,255,255,0.05)",
+                  border: viewMode === "card" ? "1px solid rgba(16,185,129,0.4)" : "1px solid var(--surface-border)",
+                  color: viewMode === "card" ? "var(--brand-primary)" : "var(--text-secondary)", cursor: "pointer" }}>
+                <LayoutGrid size={16} /> 카드형
+              </button>
+              <button onClick={() => { setViewMode("list"); localStorage.setItem("dashboardViewMode", "list"); }}
+                style={{ flex: 1, padding: "0.6rem", borderRadius: "8px", fontSize: "0.85rem", fontWeight: "700", display: "flex", alignItems: "center", justifyContent: "center", gap: "0.4rem",
+                  background: viewMode === "list" ? "rgba(16,185,129,0.15)" : "rgba(255,255,255,0.05)",
+                  border: viewMode === "list" ? "1px solid rgba(16,185,129,0.4)" : "1px solid var(--surface-border)",
+                  color: viewMode === "list" ? "var(--brand-primary)" : "var(--text-secondary)", cursor: "pointer" }}>
+                <List size={16} /> 목록형
+              </button>
+            </div>
           </div>
 
           {profile?.is_admin && (

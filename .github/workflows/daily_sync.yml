@@ -1,0 +1,55 @@
+name: Daily Data Sync
+
+on:
+  schedule:
+    # 06:00 KST (21:00 UTC)
+    - cron: '0 21 * * *'
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install -r collector/requirements.txt
+
+      - name: Run collector
+        env:
+          NARA_SERVICE_KEY: ${{ secrets.NARA_SERVICE_KEY }}
+          KEA_SERVICE_KEY_ENCODING: ${{ secrets.KEA_SERVICE_KEY_ENCODING }}
+          KEA_SERVICE_KEY_DECODING: ${{ secrets.KEA_SERVICE_KEY_DECODING }}
+          KAPT_SERVICE_KEY: ${{ secrets.KAPT_SERVICE_KEY }}
+          KAKAO_API_KEY: ${{ secrets.KAKAO_API_KEY }}
+          VWORLD_API_KEY: ${{ secrets.VWORLD_API_KEY }}
+          MAIL_SMTP_HOST: ${{ secrets.MAIL_SMTP_HOST }}
+          MAIL_SMTP_PORT: ${{ secrets.MAIL_SMTP_PORT }}
+          MAIL_USER: ${{ secrets.MAIL_USER }}
+          MAIL_PASS: ${{ secrets.MAIL_PASS }}
+          MAIL_FROM: ${{ secrets.MAIL_FROM }}
+          MAIL_FROM_NAME: ${{ secrets.MAIL_FROM_NAME }}
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          # Set search date to yesterday
+          export SEARCH_DATE=$(date -d "yesterday" +%Y%m%d)
+          echo "Syncing for date: $SEARCH_DATE"
+          cd collector
+          # Run collection
+          python -c "from collect_data import fetch_and_process_bid_notices, fetch_and_process_delivery_requests, fetch_and_process_nuri_bids; fetch_and_process_bid_notices('$SEARCH_DATE'); fetch_and_process_delivery_requests('$SEARCH_DATE'); fetch_and_process_nuri_bids('$SEARCH_DATE')"
+          # Run AI analysis on pending items
+          python -c "from ai_processor import process_pending_notices; process_pending_notices(limit=50)"
+          # Sync to Supabase
+          python sync_supabase.py
