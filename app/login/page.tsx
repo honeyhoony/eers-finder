@@ -5,273 +5,190 @@ import { createClient } from "@/utils/supabase/client";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Mail, ShieldCheck, ArrowRight, AlertCircle, Clock,
-  User, Phone, Building2, MapPin
+  User, Phone, Building2, MapPin, CheckCircle2, ChevronRight
 } from "lucide-react";
-
-const HQ_LIST = [
-  "서울본부","남서울본부","인천본부","경기북부본부","경기본부",
-  "강원본부","충북본부","대전세종충남본부","전북본부","광주전남본부",
-  "대구본부","경북본부","부산울산본부","경남본부","제주본부",
-];
-
-const HQ_OFFICES: Record<string, string[]> = {
-  "서울본부": ["직할(중구·종로구)","동대문지사","중랑지사","은평지사","서대문지사","강북지사","성북지사","성동지사","광진지사","마포지사","용산지사","도봉지사","노원지사"],
-  "남서울본부": ["직할(영등포구)","양천지사","강서지사","동작지사","관악지사","강동지사","송파지사","구로지사","금천지사","강남지사","서초지사","과천지사"],
-  "인천본부": ["직할(계양·부평)","연수지사","남동지사","미추홀지사","동구지사","서구지사","강화지사","옹진지사"],
-  "경기북부본부": ["직할(의정부·양주)","고양지사","파주지사","구리지사","남양주지사","양평지사","포천지사","동두천지사","가평지사","연천지사"],
-  "경기본부": ["직할(수원)","안양지사","군포지사","의왕지사","안산지사","성남지사","오산지사","화성지사","평택지사","광주지사","용인지사","안성지사","이천지사","여주지사","하남지사","광명지사"],
-  "강원본부": ["직할(춘천)","원주지사","강릉지사","홍천지사","횡성지사","속초지사","고성지사","철원지사","삼척지사","영월지사","동해지사","인제지사","양구지사","태백지사","양양지사","화천지사","평창지사","정선지사"],
-  "충북본부": ["직할(청주)","충주지사","제천지사","진천지사","증평지사","괴산지사","음성지사","영동지사","보은지사","옥천지사","단양지사"],
-  "대전세종충남본부": ["직할(대전 동·중구)","세종지사","천안지사","아산지사","계룡지사","당진지사","서산지사","보령지사","논산지사","공주지사","홍성지사","태안지사","부여지사","예산지사","금산지사","서천지사","청양지사"],
-  "전북본부": ["직할(전주 덕진·완주)","익산지사","군산지사","김제지사","정읍지사","남원지사","고창지사","부안지사","임실지사","진안지사","장수지사","순창지사","무주지사"],
-  "광주전남본부": ["직할(광주 북·동구)","여수지사","순천지사","목포지사","나주지사","해남지사","고흥지사","영암지사","화순지사","광양지사","보성지사","무안지사","영광지사","강진지사","장성지사","장흥지사","담양지사","진도지사","곡성지사","완도지사","신안지사","구례지사","함평지사"],
-  "대구본부": ["직할(북구·중구)","동대구지사","서대구지사","남대구지사","경주지사","포항지사","북포항지사","경산지사","김천지사","영천지사","칠곡지사","성주지사","청도지사","고령지사","영덕지사"],
-  "경북본부": ["직할(안동·영주)","구미지사","상주지사","의성지사","문경지사","예천지사","봉화지사","울진지사","군위지사","청송지사","영양지사"],
-  "부산울산본부": ["직할(부산진·동구)","울산지사","북구지사","사하지사","동래지사","해운대지사","수영지사","사상지사","남구지사","금정지사","연제지사","서구지사","중구지사","영도지사","양산지사"],
-  "경남본부": ["직할(창원 성산·의창)","진주지사","거제지사","밀양지사","사천지사","통영지사","거창지사","함안지사","창녕지사","합천지사","하동지사","고성지사","산청지사","남해지사","함양지사","의령지사"],
-  "제주본부": ["직할(제주시)","서귀포지사"],
-};
+import { HQ_LIST, OFFICE_CONTACTS } from "@/utils/office_data";
 
 type Step = "info" | "otp";
 
 export default function LoginPage() {
   const supabase = createClient();
 
-  // Step 1 — 사용자 정보
-  const [email,  setEmail]  = useState("");
+  // 폼 상태
+  const [emailId, setEmailId] = useState("");
   const [name,   setName]   = useState("");
   const [phone,  setPhone]  = useState("");
   const [hq,     setHq]     = useState("");
   const [office, setOffice] = useState("");
 
-  // Step 2 — OTP
-  const [step,     setStep]     = useState<Step>("info");
-  const [otp,      setOtp]      = useState("");
-  const [timeLeft, setTimeLeft] = useState(300);
-  const [loading,  setLoading]  = useState(false);
-  const [error,    setError]    = useState<string | null>(null);
+  const email = emailId.trim() ? `${emailId.trim()}@kepco.co.kr` : "";
 
-  const officeList = hq ? HQ_OFFICES[hq] || [] : [];
+  // 진행 단계
+  const [step, setStep] = useState<Step>("info");
+  const [otp, setOtp] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [timeLeft, setTimeLeft] = useState(300); // 5분 = 300초
 
   useEffect(() => {
-    let t: NodeJS.Timeout;
-    if (step === "otp" && timeLeft > 0) t = setInterval(() => setTimeLeft(p => p - 1), 1000);
-    return () => clearInterval(t);
+    let timer: NodeJS.Timeout;
+    if (step === "otp" && timeLeft > 0) {
+      timer = setInterval(() => {
+        setTimeLeft((prev) => prev - 1);
+      }, 1000);
+    } else if (timeLeft === 0) {
+      setError("인증 시간이 만료되었습니다. 다시 시도해 주세요.");
+    }
+    return () => clearInterval(timer);
   }, [step, timeLeft]);
 
-  const fmt = (s: number) => `${Math.floor(s/60)}:${(s%60).toString().padStart(2,"0")}`;
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const getOfficeList = (selectedHq: string) => {
+    return Array.from(new Set(OFFICE_CONTACTS.filter(o => o.hq === selectedHq).map(o => o.office)));
+  };
 
   const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    if (!email.endsWith("@kepco.co.kr")) { setError("한전 공식 이메일(@kepco.co.kr)만 사용 가능합니다."); return; }
-    if (!name.trim()) { setError("이름을 입력해주세요."); return; }
-    if (!hq)          { setError("지역본부를 선택해주세요."); return; }
-    if (!office)      { setError("사업소를 선택해주세요."); return; }
-    if (!phone.trim()) { setError("전화번호를 입력해주세요."); return; }
+    if (!emailId.trim()) return setError("이메일을 입력해 주세요.");
+    if (!name.trim()) return setError("성명을 입력해 주세요.");
+    if (!phone.trim()) return setError("전화번호를 입력해 주세요.");
+    if (!hq || !office) return setError("소속 본부와 사업소를 모두 선택해 주세요.");
 
     setLoading(true);
     try {
-      const { error } = await supabase.auth.signInWithOtp({
-        email,
-        options: { shouldCreateUser: true, emailRedirectTo: `${window.location.origin}/dashboard` },
+      const res = await fetch("/api/auth/otp/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, name, phone, hq, office })
       });
-      if (error) throw error;
-      setStep("otp");
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "메일 발송 실패");
+
       setTimeLeft(300);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "OTP 발송 오류");
+      setStep("otp");
+    } catch (err: any) {
+      setError("인증메일 발송 실패: " + err.message);
     } finally {
       setLoading(false);
     }
   };
 
   const handleVerifyOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    if (timeLeft === 0) { setError("인증 시간이 만료되었습니다."); return; }
-    if (otp.length !== 6 && otp.length !== 8) { setError("6~8자리 코드를 입력하세요."); return; }
+      e.preventDefault();
+      setLoading(true);
+      try {
+          const res = await fetch("/api/auth/otp/verify", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ email, otp })
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || "인증 실패");
 
-    setLoading(true);
-    try {
-      const { data, error } = await supabase.auth.verifyOtp({ email, token: otp, type: "email" });
-      if (error) throw error;
-
-      if (data?.session) {
-        // 프로필 정보 저장/업데이트
-        await supabase.from("profiles").upsert({
-          id: data.session.user.id,
-          email,
-          name,
-          phone,
-          hq,
-          office,
-          role: email === "jeon.bh@kepco.co.kr" ? "S" : "B",
-          is_admin: email === "jeon.bh@kepco.co.kr",
-        }, { onConflict: "id", ignoreDuplicates: false });
-
-        window.location.href = "/dashboard";
+          // Resend OTP 성공 시, 서버가 생성한 Supabase Magic Link로 리다이렉트하여 자동 로그인 처리
+          if (data.redirectUrl) {
+              window.location.href = data.redirectUrl;
+          } else {
+              window.location.href = "/dashboard";
+          }
+      } catch (err: any) {
+          setError("인증 실패: " + err.message);
+      } finally {
+          setLoading(false);
       }
-    } catch {
-      setError("인증 코드가 올바르지 않거나 만료되었습니다.");
-    } finally {
-      setLoading(false);
-    }
   };
 
-  const inputStyle = {
-    width: "100%", padding: "0.75rem 1rem 0.75rem 2.6rem",
-    borderRadius: "10px", background: "rgba(0,0,0,0.25)",
-    border: "1px solid var(--surface-border)", color: "white",
-    fontSize: "0.95rem", outline: "none", transition: "border-color 0.2s",
-  } as const;
-
-  const selectStyle = {
-    width: "100%", padding: "0.75rem 1rem",
-    borderRadius: "10px", background: "rgba(0,0,0,0.25)",
-    border: "1px solid var(--surface-border)", color: "white",
-    fontSize: "0.95rem", outline: "none",
-  } as const;
-
   return (
-    <main style={{ minHeight: "100vh", position: "relative", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <div className="orb orb-primary" />
-      <div className="orb orb-secondary" />
+    <main style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#0f172a", padding: "1.5rem" }}>
+      <div style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, overflow: "hidden", zIndex: 0 }}>
+        <div style={{ position: "absolute", top: "10%", left: "15%", width: "300px", height: "300px", background: "rgba(16,185,129,0.05)", borderRadius: "50%", filter: "blur(80px)" }} />
+        <div style={{ position: "absolute", bottom: "10%", right: "15%", width: "400px", height: "400px", background: "rgba(59,130,246,0.05)", borderRadius: "50%", filter: "blur(100px)" }} />
+      </div>
 
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.4 }}
-        className="glass-panel"
-        style={{ width: "100%", maxWidth: "480px", margin: "1rem", position: "relative", zIndex: 1, padding: "2rem" }}
-      >
-        {/* 헤더 */}
-        <div style={{ textAlign: "center", marginBottom: "1.75rem" }}>
-          <div style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: "56px", height: "56px", borderRadius: "16px", background: "rgba(16,185,129,0.15)", color: "var(--brand-primary)", marginBottom: "1rem" }}>
-            <ShieldCheck size={32} />
+      <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} className="glass-panel" style={{ width: "100%", maxWidth: "560px", padding: "2.5rem", borderRadius: "24px", background: "white", position: "relative", zIndex: 1, boxShadow: "0 25px 50px -12px rgba(0,0,0,0.25)" }}>
+        <div style={{ textAlign: "center", marginBottom: "2rem" }}>
+          <div style={{ display: "inline-flex", padding: "0.75rem", background: "rgba(16,185,129,0.1)", borderRadius: "16px", color: "#10b981", marginBottom: "1rem" }}>
+            <ShieldCheck size={40} />
           </div>
-          <h1 style={{ fontSize: "1.6rem", fontWeight: "700", marginBottom: "0.4rem" }}>EERS 시스템 접속</h1>
-          <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem" }}>
-            {step === "info" ? "담당자 정보를 입력하고 이메일 인증을 받으세요." : `${email}로 발송된 인증 코드를 입력하세요.`}
-          </p>
+          <h1 style={{ fontSize: "1.8rem", fontWeight: "900", color: "#0f172a", marginBottom: "0.5rem" }}>EERS Bid 알리미</h1>
+          <p style={{ color: "#64748b", fontSize: "0.95rem" }}>한전 업무 담당자 전용 시스템</p>
         </div>
 
-        {/* 단계 표시 */}
-        <div style={{ display: "flex", gap: "0.4rem", marginBottom: "1.5rem" }}>
-          {(["info","otp"] as Step[]).map((s, i) => (
-            <div key={s} style={{ flex: 1, height: "4px", borderRadius: "2px",
-              background: step === s || (i === 0) ? "var(--brand-primary)" : "rgba(255,255,255,0.1)" }} />
-          ))}
-        </div>
-
-        {error && (
-          <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
-            style={{ padding: "0.75rem", borderRadius: "8px", background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)", color: "#fca5a5", fontSize: "0.875rem", display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "1.25rem" }}>
-            <AlertCircle size={16} /> {error}
-          </motion.div>
-        )}
+        {error && <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} style={{ padding: "0.85rem 1rem", background: "#fef2f2", border: "1px solid #fee2e2", color: "#991b1b", borderRadius: "12px", marginBottom: "1.5rem", fontSize: "0.85rem", fontWeight: "600", display: "flex", alignItems: "center", gap: "0.5rem" }}><AlertCircle size={18} /> {error}</motion.div>}
 
         <AnimatePresence mode="wait">
           {step === "info" ? (
-            <motion.form key="info" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }}
-              onSubmit={handleSendOtp} style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-
-              {/* 이메일 */}
+            <motion.form key="info" onSubmit={handleSendOtp} style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+              
               <div>
-                <label style={{ fontSize: "0.8rem", color: "var(--text-muted)", display: "block", marginBottom: "0.4rem" }}>한전 이메일 (사번@kepco.co.kr) *</label>
-                <div style={{ position: "relative" }}>
-                  <Mail size={16} style={{ position: "absolute", left: "0.9rem", top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
-                  <input type="email" value={email} onChange={e => setEmail(e.target.value)}
-                    placeholder="123456@kepco.co.kr" required style={inputStyle}
-                    onFocus={e => e.target.style.borderColor = "var(--brand-primary)"}
-                    onBlur={e => e.target.style.borderColor = "var(--surface-border)"} />
+                <label style={{ fontSize: "0.85rem", fontWeight: "800", color: "#475569", marginBottom: "0.5rem", display: "block" }}>이메일 계정</label>
+                <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+                  <Mail size={18} style={{ position: "absolute", left: "1rem", color: "#94a3b8" }} />
+                  <input type="text" value={emailId} onChange={e => setEmailId(e.target.value)} placeholder="ID 입력" required 
+                    style={{ width: "100%", padding: "0.85rem 8rem 0.85rem 2.8rem", borderRadius: "12px", border: "1.5px solid #e2e8f0", fontSize: "1rem", color: "#000", outline: "none" }} />
+                  <span style={{ position: "absolute", right: "1rem", color: "#64748b", fontWeight: "700", fontSize: "0.9rem" }}>@kepco.co.kr</span>
                 </div>
               </div>
 
-              {/* 이름 */}
-              <div>
-                <label style={{ fontSize: "0.8rem", color: "var(--text-muted)", display: "block", marginBottom: "0.4rem" }}>이름 *</label>
-                <div style={{ position: "relative" }}>
-                  <User size={16} style={{ position: "absolute", left: "0.9rem", top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
-                  <input type="text" value={name} onChange={e => setName(e.target.value)}
-                    placeholder="홍길동" required style={inputStyle}
-                    onFocus={e => e.target.style.borderColor = "var(--brand-primary)"}
-                    onBlur={e => e.target.style.borderColor = "var(--surface-border)"} />
-                </div>
-              </div>
-
-              {/* 전화번호 */}
-              <div>
-                <label style={{ fontSize: "0.8rem", color: "var(--text-muted)", display: "block", marginBottom: "0.4rem" }}>전화번호 *</label>
-                <div style={{ position: "relative" }}>
-                  <Phone size={16} style={{ position: "absolute", left: "0.9rem", top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
-                  <input type="tel" value={phone} onChange={e => setPhone(e.target.value)}
-                    placeholder="010-1234-5678" required style={inputStyle}
-                    onFocus={e => e.target.style.borderColor = "var(--brand-primary)"}
-                    onBlur={e => e.target.style.borderColor = "var(--surface-border)"} />
-                </div>
-              </div>
-
-              {/* 지역본부 */}
-              <div>
-                <label style={{ fontSize: "0.8rem", color: "var(--text-muted)", display: "block", marginBottom: "0.4rem" }}>
-                  <Building2 size={12} style={{ display: "inline", marginRight: "4px" }} />지역본부 *
-                </label>
-                <select value={hq} onChange={e => { setHq(e.target.value); setOffice(""); }} required style={selectStyle}>
-                  <option value="">-- 지역본부 선택 --</option>
-                  {HQ_LIST.map(h => <option key={h} value={h}>{h}</option>)}
-                </select>
-              </div>
-
-              {/* 사업소 */}
-              <div>
-                <label style={{ fontSize: "0.8rem", color: "var(--text-muted)", display: "block", marginBottom: "0.4rem" }}>
-                  <MapPin size={12} style={{ display: "inline", marginRight: "4px" }} />사업소 *
-                </label>
-                <select value={office} onChange={e => setOffice(e.target.value)} required disabled={!hq} style={{ ...selectStyle, opacity: hq ? 1 : 0.5 }}>
-                  <option value="">-- 사업소 선택 ({hq || "본부 먼저 선택"}) --</option>
-                  {officeList.map(o => <option key={o} value={o}>{o}</option>)}
-                </select>
-              </div>
-
-              <button type="submit" disabled={loading} className="btn-primary"
-                style={{ width: "100%", justifyContent: "center", padding: "0.9rem", fontSize: "1rem", marginTop: "0.25rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                {loading ? "전송 중..." : "이메일 인증코드 발송"} <ArrowRight size={18} />
-              </button>
-
-              <p style={{ textAlign: "center", fontSize: "0.78rem", color: "var(--text-muted)" }}>
-                입력하신 정보는 EERS 담당자 등록에만 사용됩니다.
-              </p>
-            </motion.form>
-          ) : (
-            <motion.form key="otp" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
-              onSubmit={handleVerifyOtp} style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
-
-              <div style={{ padding: "0.75rem 1rem", borderRadius: "8px", background: "rgba(16,185,129,0.08)", border: "1px solid rgba(16,185,129,0.2)", fontSize: "0.85rem", color: "var(--text-secondary)" }}>
-                📧 <strong>{email}</strong>로 인증코드를 발송했습니다.<br />
-                {name}님 ({hq} {'>'} {office})
-              </div>
-
-              <div>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
-                  <label style={{ fontSize: "0.875rem", color: "var(--text-secondary)" }}>이메일 인증코드</label>
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.25rem", color: timeLeft < 60 ? "#ef4444" : "var(--brand-primary)", fontSize: "0.875rem", fontWeight: "600" }}>
-                    <Clock size={14} /> {fmt(timeLeft)}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+                <div>
+                  <label style={{ fontSize: "0.85rem", fontWeight: "800", color: "#475569", marginBottom: "0.5rem", display: "block" }}>성명</label>
+                  <div style={{ position: "relative" }}>
+                    <User size={18} style={{ position: "absolute", left: "1rem", top: "50%", transform: "translateY(-50%)", color: "#94a3b8" }} />
+                    <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="홍길동" required style={{ width: "100%", padding: "0.85rem 1rem 0.85rem 2.8rem", borderRadius: "12px", border: "1.5px solid #e2e8f0", fontSize: "1rem", color: "#000", outline: "none" }} />
                   </div>
                 </div>
-                <input type="text" maxLength={8} value={otp}
-                  onChange={e => setOtp(e.target.value.replace(/[^0-9]/g,""))}
-                  placeholder="인증코드 입력" disabled={timeLeft === 0} autoFocus
-                  style={{ width: "100%", padding: "1rem", borderRadius: "12px", background: "rgba(0,0,0,0.2)", border: "1px solid var(--surface-border)", color: "white", fontSize: "1.75rem", letterSpacing: "0.6rem", textAlign: "center", outline: "none", opacity: timeLeft === 0 ? 0.5 : 1 }} />
+                <div>
+                  <label style={{ fontSize: "0.85rem", fontWeight: "800", color: "#475569", marginBottom: "0.5rem", display: "block" }}>전화번호 (Push 알람 수신용)</label>
+                  <div style={{ position: "relative" }}>
+                    <Phone size={18} style={{ position: "absolute", left: "1rem", top: "50%", transform: "translateY(-50%)", color: "#94a3b8" }} />
+                    <input type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="01012345678" required style={{ width: "100%", padding: "0.85rem 1rem 0.85rem 2.8rem", borderRadius: "12px", border: "1.5px solid #e2e8f0", fontSize: "1rem", color: "#000", outline: "none" }} />
+                  </div>
+                </div>
               </div>
 
-              <button type="submit" disabled={loading || otp.length < 6 || timeLeft === 0}
-                className="btn-primary" style={{ width: "100%", justifyContent: "center", padding: "0.9rem", fontSize: "1rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                {loading ? "확인 중..." : "로그인 완료"} <ArrowRight size={18} />
-              </button>
+              <div>
+                <label style={{ fontSize: "0.85rem", fontWeight: "800", color: "#475569", marginBottom: "0.6rem", display: "block" }}>소속 본부</label>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: "0.4rem", padding: "0.25rem" }}>
+                  {HQ_LIST.map(h => (
+                    <button key={h} type="button" onClick={() => { setHq(h); setOffice(""); }} style={{ padding: "0.6rem 0.2rem", fontSize: "0.8rem", borderRadius: "8px", fontWeight: "800", cursor: "pointer", transition: "0.15s", background: hq === h ? "#3b82f6" : "#f1f5f9", color: hq === h ? "white" : "#475569", border: hq === h ? "1px solid #3b82f6" : "1px solid #e2e8f0" }}>{h.replace("본부", "")}</button>
+                  ))}
+                </div>
+              </div>
 
-              <button type="button" onClick={() => { setStep("info"); setOtp(""); }}
-                style={{ fontSize: "0.875rem", color: "var(--text-muted)", textDecoration: "underline", background: "none", border: "none", cursor: "pointer" }}>
-                이전으로 돌아가기
+              {hq && (
+                <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
+                  <label style={{ fontSize: "0.85rem", fontWeight: "800", color: "#475569", marginBottom: "0.6rem", display: "block" }}>사업소 (지사)</label>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "0.4rem", maxHeight: "250px", overflowY: "auto", padding: "0.5rem", background: "#f8fafc", borderRadius: "12px", border: "1px solid #e2e8f0" }}>
+                    {getOfficeList(hq).map(o => (
+                      <button key={o} type="button" onClick={() => setOffice(o)} style={{ padding: "0.7rem 0.5rem", fontSize: "0.8rem", borderRadius: "8px", fontWeight: "700", textAlign: "center", cursor: "pointer", transition: "0.15s", background: office === o ? "#3b82f6" : "white", color: office === o ? "white" : "#64748b", border: office === o ? "1px solid #3b82f6" : "1px solid #e2e8f0" }}>{o}</button>
+                    ))}
+                  </div>
+                </motion.div>
+              )}
+
+              <button type="submit" disabled={!office || loading} style={{ width: "100%", padding: "1.1rem", borderRadius: "14px", background: "#0f172a", color: "white", fontWeight: "800", fontSize: "1.05rem", border: "none", cursor: "pointer", marginTop: "1rem", opacity: (loading || !office) ? 0.6 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem" }}>
+                {loading ? "전송 중..." : "인증메일 발송 및 접속"} <ArrowRight size={20} />
               </button>
+            </motion.form>
+          ) : (
+            <motion.form key="otp" onSubmit={handleVerifyOtp} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}>
+              <div style={{ textAlign: "center", marginBottom: "2rem" }}>
+                <Clock size={40} color="#3b82f6" style={{ margin: "0 auto 1rem" }} />
+                <p style={{ color: "#475569", fontWeight: "600" }}>{email}로 인증코드를 발송했습니다.<br/>6자리 코드를 입력해 주세요.</p>
+                <div style={{ marginTop: "0.5rem", fontSize: "1.1rem", fontWeight: "800", color: timeLeft < 60 ? "#ef4444" : "#3b82f6" }}>
+                   남은 시간 {formatTime(timeLeft)}
+                </div>
+              </div>
+              <input type="text" maxLength={6} value={otp} onChange={e => setOtp(e.target.value)} placeholder="000000" required style={{ width: "100%", padding: "1rem", fontSize: "2rem", textAlign: "center", borderRadius: "16px", border: "3px solid #3b82f6", marginBottom: "1.5rem", letterSpacing: "0.3rem", outline: "none", color: "#000" }} />
+              <button type="submit" disabled={loading || otp.length < 6 || timeLeft === 0} style={{ width: "100%", padding: "1.1rem", borderRadius: "14px", background: "#10b981", color: "white", fontWeight: "800", fontSize: "1.1rem", border: "none", opacity: (loading || timeLeft === 0) ? 0.6 : 1 }}>인증 확인</button>
+              <button type="button" onClick={() => { setStep("info"); setError(null); }} style={{ width: "100%", background: "none", border: "none", color: "#94a3b8", fontSize: "0.9rem", marginTop: "1rem", textDecoration: "underline", cursor: "pointer" }}>정보 다시 입력하기</button>
             </motion.form>
           )}
         </AnimatePresence>
