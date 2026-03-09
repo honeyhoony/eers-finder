@@ -12,11 +12,14 @@ export default function AuthCallbackPage() {
   useEffect(() => {
     const supabase = createClient();
     
-    // Check if there's an error in the hash fragment or query
     const hashParams = new URLSearchParams(window.location.hash.replace('#', '?'));
     const urlParams = new URLSearchParams(window.location.search);
     
+    // Combine parameters from both hash and query string
+    const accessToken = hashParams.get('access_token') || urlParams.get('access_token');
+    const refreshToken = hashParams.get('refresh_token') || urlParams.get('refresh_token');
     const errDesc = hashParams.get('error_description') || urlParams.get('error_description') || hashParams.get('error') || urlParams.get('error');
+
     if (errDesc) {
         setStatus("인증 중 오류가 발생했습니다.");
         setErrorDetails(decodeURIComponent(errDesc));
@@ -24,18 +27,13 @@ export default function AuthCallbackPage() {
         return;
     }
 
-    // Try to get session or manually parse implicit hash
     let isNavigating = false;
 
-    // Check if we have access_token in hash (Implicit Flow from generateLink)
-    const accessToken = hashParams.get('access_token');
-    const refreshToken = hashParams.get('refresh_token');
-
-    if (accessToken && refreshToken) {
+    if (accessToken) {
         setStatus("토큰을 확인했습니다. 세션을 설정 중입니다...");
         supabase.auth.setSession({
             access_token: accessToken,
-            refresh_token: refreshToken
+            refresh_token: refreshToken || ""
         }).then(({ data, error }) => {
             if (error) {
                 console.error("Set session error:", error);
@@ -45,38 +43,19 @@ export default function AuthCallbackPage() {
             } else if (data.session && !isNavigating) {
                 isNavigating = true;
                 setStatus("인증 완료! 대시보드로 이동합니다...");
-                router.push("/dashboard");
+                // 쿠키가 브라우저에 확실히 저장되도록 아주 약간의 지연을 줍니다.
+                setTimeout(() => router.push("/dashboard"), 500);
             }
         });
     } else {
-        // Fallback to getSession for PKCE or already set session
+        // Fallback to getSession
         supabase.auth.getSession().then(({ data: { session }, error }) => {
-            if (error) {
-                console.error(error);
-                setStatus("세션을 가져오는 중 오류가 발생했습니다.");
-                setErrorDetails(error.message);
-                setTimeout(() => router.push("/login"), 5000);
-                return;
-            }
-
             if (session && !isNavigating) {
                 isNavigating = true;
-                setStatus("인증 완료! 대시보드로 이동합니다...");
                 router.push("/dashboard");
             } else {
-                 setTimeout(() => {
-                     supabase.auth.getSession().then(({ data }) => {
-                         if (data.session && !isNavigating) {
-                             isNavigating = true;
-                             setStatus("인증 완료! 대시보드로 이동합니다...");
-                             router.push("/dashboard");
-                         } else if (!isNavigating) {
-                             setStatus("로그인(세션) 정보를 찾을 수 없습니다.");
-                             setErrorDetails("URL에 유효한 세션 정보가 없습니다. 다시 로그인해 주세요.");
-                             setTimeout(() => router.push("/login"), 4000);
-                         }
-                     });
-                 }, 3500);
+                setStatus("로그인 정보를 찾을 수 없습니다. 다시 로그인해 주세요.");
+                setTimeout(() => router.push("/login"), 3000);
             }
         });
     }
