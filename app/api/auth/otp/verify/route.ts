@@ -10,11 +10,10 @@ const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
 
 async function generateAndReturnLink(email: string, metadata: any, req?: NextRequest) {
   // 1. Supabase에서 세션을 생성할 수 있는 마법의 링크(Magic Link) 생성
-  let siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
-  if (!siteUrl && req) {
-    siteUrl = new URL(req.url).origin;
-  }
-  if (!siteUrl) siteUrl = 'http://localhost:3000';
+  // 로컬 테스트 환경이 아닌 경우 실제 배포 주소를 강제로 사용하도록 설정
+  const siteUrl = "https://eers-bid-alarm.vercel.app";
+  
+  console.log(`[Auth] Generating link for ${email} with redirectTo: ${siteUrl}/auth/callback`);
 
   const { data, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
     type: 'magiclink',
