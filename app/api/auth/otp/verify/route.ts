@@ -9,13 +9,16 @@ const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
 });
 
 async function generateAndReturnLink(email: string, metadata: any, req: NextRequest) {
-  // 1. 현재 요청이 들어온 오리진(도메인)을 정확히 파악합니다.
-  const origin = req.nextUrl.origin; // 예: http://localhost:3000 또는 https://eers-bid-alarm.vercel.app
-  const redirectUrl = new URL("/auth/callback", origin).toString();
-  
-  console.log(`[Auth] Redirect URL set to: ${redirectUrl}`);
+  // 현재 접속한 도메인 파악 (eers-bid-alarm.vercel.app 또는 localhost:3000)
+  const host = req.headers.get("host") || "";
+  const isLocal = host.includes("localhost") || host.includes("127.0.0.1");
+  const protocol = isLocal ? "http" : "https";
+  const currentOrigin = `${protocol}://${host}`;
+  const redirectUrl = `${currentOrigin}/auth/callback`;
 
-  // 2. Supabase 링크 생성 (Magic Link)
+  console.log(`[Auth] Current environment: ${isLocal ? "LOCAL" : "PROD"}, Origin: ${currentOrigin}`);
+
+  // 1. Supabase 링크 생성
   const { data, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
     type: 'magiclink',
     email,
@@ -26,17 +29,12 @@ async function generateAndReturnLink(email: string, metadata: any, req: NextRequ
   });
 
   let actionLink = "";
-
   if (linkError) {
-      // 가입되지 않은 경우 signup 시도 (비밀번호는 랜덤)
       const { data: signupData, error: signupError } = await supabaseAdmin.auth.admin.generateLink({
           type: 'signup',
           email,
           password: Math.random().toString(36).slice(-10) + 'A1!',
-          options: { 
-              data: metadata,
-              redirectTo: redirectUrl
-          }
+          options: { data: metadata, redirectTo: redirectUrl }
       });
       if (signupError) throw signupError;
       actionLink = signupData.properties.action_link;
@@ -44,12 +42,20 @@ async function generateAndReturnLink(email: string, metadata: any, req: NextRequ
       actionLink = data.properties.action_link;
   }
 
-  if (actionLink.includes("redirect_to=http://")) {
-    actionLink = actionLink.replace("redirect_to=http://", "redirect_to=https://");
+  // 2. [핵심] 공격적인 주소 보정
+  // 만약 Supabase 설정 때문에 localhost 주소를 포함하고 있다면, 현재 사용자가 접속한 도메인으로 강제 치환
+  if (actionLink.includes("localhost:3000") && !isLocal) {
+    console.log("[Auth] PROD environment: Forcing localhost -> production domain");
+    actionLink = actionLink
+      .replace(/http:\/\/localhost:3000/g, "https://eers-bid-alarm.vercel.app")
+      .replace(/localhost:3000/g, "eers-bid-alarm.vercel.app");
+  } else if (!actionLink.includes("localhost:3000") && isLocal) {
+    console.log("[Auth] LOCAL environment: Forcing production domain -> localhost");
+    const domain = new URL(actionLink).host;
+    actionLink = actionLink.replace(domain, "localhost:3000").replace("https://", "http://");
   }
 
-  console.log(`[Auth] Final action link: ${actionLink}`);
-
+  console.log(`[Auth] Final actionLink: ${actionLink}`);
   return NextResponse.json({ success: true, redirectUrl: actionLink });
 }
 
