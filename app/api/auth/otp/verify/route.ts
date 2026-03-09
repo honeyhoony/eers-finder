@@ -43,11 +43,22 @@ async function generateAndReturnLink(email: string, metadata: any, req?: NextReq
       actionLink = data.properties.action_link;
   }
 
-  // 핵심: Supabase 엔진이 내부 설정(Site URL) 때문에 redirectTo를 무시하고 localhost를 줄 경우를 대비해 강제 치환
-  if (actionLink.includes("localhost:3000")) {
-    console.log("[Auth] Fixing localhost redirect in action link...");
-    actionLink = actionLink.replace(/localhost:3000/g, "eers-bid-alarm.vercel.app");
+  // 핵심: Supabase 엔진이 내부 설정(Site URL) 때문에 redirectTo를 무시하고 localhost를 줄 경우를 대비해 
+  // 모든 localhost와 http를 실제 배포 주소와 https로 강제 변환합니다.
+  actionLink = actionLink
+    .split("http://localhost:3000").join("https://eers-bid-alarm.vercel.app")
+    .split("http%3A%2F%2Flocalhost%3A3000").join("https%3A%2F%2Feers-bid-alarm.vercel.app")
+    .split("localhost:3000").join("eers-bid-alarm.vercel.app");
+
+  // 혹시라도 http만 남아있는 경우 (localhost가 아니더라도) https로 강제 승격
+  if (actionLink.includes("redirect_to=http%3A%2F%2F")) {
+    actionLink = actionLink.replace("redirect_to=http%3A%2F%2F", "redirect_to=https%3A%2F%2F");
   }
+  if (actionLink.includes("redirect_to=http://")) {
+    actionLink = actionLink.replace("redirect_to=http://", "redirect_to=https://");
+  }
+
+  console.log(`[Auth] Final action link: ${actionLink}`);
 
   return NextResponse.json({ success: true, redirectUrl: actionLink });
 }
