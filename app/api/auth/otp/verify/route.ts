@@ -24,6 +24,8 @@ async function generateAndReturnLink(email: string, metadata: any, req?: NextReq
     }
   });
 
+  // Supabase link 생성 결과에서 혹시라도 localhost가 포함되어 있으면 강제로 치환합니다.
+  let actionLink = "";
   if (linkError) {
       // 가입되지 않은 경우 signup 시도 (비밀번호는 랜덤)
       const { data: signupData, error: signupError } = await supabaseAdmin.auth.admin.generateLink({
@@ -36,10 +38,18 @@ async function generateAndReturnLink(email: string, metadata: any, req?: NextReq
           }
       });
       if (signupError) throw signupError;
-      return NextResponse.json({ success: true, redirectUrl: signupData.properties.action_link });
+      actionLink = signupData.properties.action_link;
+  } else {
+      actionLink = data.properties.action_link;
   }
 
-  return NextResponse.json({ success: true, redirectUrl: data.properties.action_link });
+  // 핵심: Supabase 엔진이 내부 설정(Site URL) 때문에 redirectTo를 무시하고 localhost를 줄 경우를 대비해 강제 치환
+  if (actionLink.includes("localhost:3000")) {
+    console.log("[Auth] Fixing localhost redirect in action link...");
+    actionLink = actionLink.replace(/localhost:3000/g, "eers-bid-alarm.vercel.app");
+  }
+
+  return NextResponse.json({ success: true, redirectUrl: actionLink });
 }
 
 export async function POST(request: NextRequest) {
