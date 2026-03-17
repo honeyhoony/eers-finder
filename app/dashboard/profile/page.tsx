@@ -6,6 +6,7 @@ import { Heart, User, Phone, Mail, Bell, ArrowLeft, Save, Check, LayoutGrid, Lis
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion } from "framer-motion";
+import { subscribeUserToPush } from "@/utils/push";
 
 type Profile = {
   id: string;
@@ -31,6 +32,24 @@ type FavNotice = {
   is_favorite: boolean;
 };
 
+const HQ_OFFICE_MAP: Record<string, string[]> = {
+  "서울본부": ["직할", "동대문중랑지사", "서대문은평지사", "강북성북지사", "광진성동지사", "마포용산지사", "노원도봉지사"],
+  "남서울본부": ["직할", "강서양천지사", "관악동작지사", "강동송파지사", "구로금천지사", "강남지사", "서초지사"],
+  "인천본부": ["직할", "남인천지사", "부천지사", "서인천지사", "시흥지사", "강화지사", "영종지사"],
+  "경기북부본부": ["직할", "고양지사", "파주지사", "구리지사", "연천지사", "양주지사", "동두천지사", "포천지사", "남양주지사", "가평지사"],
+  "경기본부": ["직할", "오산지사", "평택지사", "안양지사", "안산지사", "성남지사", "용인지사", "이천지사", "서평택지사", "광주지사", "여주지사", "안성지사", "하남지사", "광명지사"],
+  "강원본부": ["직할", "원주지사", "강릉지사", "홍천지사", "성산지사", "횡성지사", "철원지사", "화천지사", "양구지사", "인제지사", "속초지사", "동해지사", "태백지사", "삼척지사", "영월지사", "평창지사", "정선지사"],
+  "충북본부": ["직할", "동청주지사", "충주지사", "제천지사", "보은지사", "옥천지사", "영동지사", "진천지사", "괴산지사", "음성지사", "단양지사"],
+  "대전세종충남본부": ["직할", "천안지사", "대덕유성지사", "아산지사", "계룡지사", "서산지사", "당진지사", "보령지사", "홍성지사", "예산지사", "부여지사", "금산지사", "서천지사", "청양지사", "공주지사", "논산지사"],
+  "전북본부": ["직할", "익산지사", "군산지사", "정읍지사", "남원지사", "김제지사", "고창지사", "부안지사", "무주지사", "장수지사", "순창지사", "임실지사", "진안지사"],
+  "광주전남본부": ["직할", "목포지사", "여수지사", "순천지사", "나주지사", "해남지사", "고흥지사", "보성지사", "화순지사", "무안지사", "영광지사", "완도지사", "진도지사"],
+  "대구본부": ["직할", "동대구지사", "경주지사", "남대구지사", "서대구지사", "포항지사", "경산지사", "영천지사", "칠곡지사", "성주지사", "청도지사", "북포항지사", "고령지사", "영덕지사"],
+  "경북본부": ["직할", "김천지사", "구미지사", "상주지사", "영주지사", "의성지사", "문경지사", "예천지사", "봉화지사", "울진지사", "청송지사", "군위지사", "영양지사"],
+  "부산울산본부": ["직할", "김해지사", "울산지사", "남부산지사", "북부산지사", "동래지사", "양산지사", "중부산지사", "금정지사", "서부산지사", "기장지사", "동울산지사", "영도지사"],
+  "경남본부": ["직할", "진주지사", "마산지사", "거제지사", "통영지사", "사천지사", "고성지사", "함안지사", "창녕지사", "밀양지사", "하동지사", "산청지사", "함양지사", "거창지사", "합천지사", "의령지사"],
+  "제주본부": ["직할", "서귀포지사"]
+};
+
 export default function ProfilePage() {
   const router = useRouter();
   const supabase = createClient();
@@ -40,11 +59,21 @@ export default function ProfilePage() {
   const [tab, setTab] = useState<"profile" | "favorites">("profile");
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
+  const [hq, setHq] = useState("");
+  const [office, setOffice] = useState("");
   const [pushEnabled, setPushEnabled] = useState(true);
   const [viewMode, setViewMode] = useState<"card" | "list">("card");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
 
   useEffect(() => {
     const load = async () => {
@@ -52,18 +81,23 @@ export default function ProfilePage() {
       if (!user) { router.push("/login"); return; }
 
       // 프로필 로드
-      const { data: p } = await supabase.from("profiles").select("*").eq("id", user.id).single();
+      const { data: p } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle();
       if (p) {
         setProfile(p);
-        setName(p.name || "");
+        setName(p.name || user.user_metadata?.name || "");
         setPhone(p.phone || "");
+        setHq(p.hq || "");
+        setOffice(p.office || "");
+        setPushEnabled(p.push_enabled ?? true);
+      } else {
+        setName(user.user_metadata?.name || "");
       }
 
       // 관심 공고 로드 (user_favorites 테이블 기반으로 변경)
       const { data: f } = await supabase
         .from("user_favorites")
         .select(`
-          status, updated_at,
+          updated_at,
           notice:notices(id, source_system, project_name, client, biz_type, amount, notice_date, assigned_hq, assigned_office, phone_number)
         `)
         .eq("user_id", user.id)
@@ -73,8 +107,7 @@ export default function ProfilePage() {
         // Flatten the join result to Match FavNotice type
         const flattened = f.map((item: any) => ({
           ...item.notice,
-          is_favorite: true,
-          status: item.status
+          is_favorite: true
         }));
         setFavs(flattened);
       }
@@ -91,10 +124,21 @@ export default function ProfilePage() {
   const handleSave = async () => {
     if (!profile) return;
     setSaving(true);
-    await supabase.from("profiles").update({ name, phone, push_enabled: pushEnabled }).eq("id", profile.id);
+    const { error } = await supabase.from("profiles").update({ 
+      name, 
+      phone,
+      hq,
+      office,
+      push_enabled: pushEnabled 
+    }).eq("id", profile.id);
+    
     setSaving(false);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    if (!error) {
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } else {
+      alert("저장 중 오류가 발생했습니다.");
+    }
   };
 
   const removeFav = async (noticeId: number) => {
@@ -120,7 +164,7 @@ export default function ProfilePage() {
   );
 
   return (
-    <div style={{ maxWidth: "800px", margin: "0 auto", paddingBottom: "4rem" }}>
+    <div style={{ maxWidth: "800px", margin: "0 auto", padding: isMobile ? "1rem" : "0 1rem 4rem 1rem", paddingBottom: "4rem" }}>
       <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "2rem" }}>
         <Link href="/dashboard" style={{ display: "flex", alignItems: "center", gap: "0.4rem", color: "var(--text-secondary)", textDecoration: "none", fontSize: "0.9rem" }}>
           <ArrowLeft size={16} /> 대시보드
@@ -152,12 +196,23 @@ export default function ProfilePage() {
             <User size={20} color="var(--brand-primary)" /> 내 프로필
           </h2>
 
-          <div style={{ marginBottom: "1.25rem" }}>
-            <label style={{ fontSize: "0.8rem", color: "var(--text-muted)", display: "block", marginBottom: "0.4rem" }}>
-              <Building size={12} style={{ display: "inline", marginRight: "4px" }} /> 소속
-            </label>
-            <input value={`${profile?.hq || ""} ${profile?.office || ""}`.trim()} readOnly
-              style={{ width: "100%", padding: "0.6rem 0.8rem", borderRadius: "8px", background: "rgba(0,0,0,0.2)", border: "1px solid var(--surface-border)", color: "var(--text-muted)", fontSize: "0.9rem" }} />
+          <div style={{ marginBottom: "1.25rem", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem" }}>
+            <div style={{ flex: 1 }}>
+              <label style={{ fontSize: "0.8rem", fontWeight: "700", color: "#64748b", display: "block", marginBottom: "0.4rem" }}>본부</label>
+              <select value={hq} onChange={e => { setHq(e.target.value); setOffice(""); }}
+                style={{ width: "100%", padding: "0.6rem", borderRadius: "8px", background: "white", border: "1px solid #e2e8f0", fontSize: "0.9rem" }}>
+                <option value="">본부 선택</option>
+                {Object.keys(HQ_OFFICE_MAP).map(h => <option key={h} value={h}>{h}</option>)}
+              </select>
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={{ fontSize: "0.8rem", fontWeight: "700", color: "#64748b", display: "block", marginBottom: "0.4rem" }}>사업소</label>
+              <select value={office} onChange={e => setOffice(e.target.value)}
+                style={{ width: "100%", padding: "0.6rem", borderRadius: "8px", background: "white", border: "1px solid #e2e8f0", fontSize: "0.9rem" }}>
+                <option value="">사업소 선택</option>
+                {hq && HQ_OFFICE_MAP[hq]?.map(o => <option key={o} value={o}>{o}</option>)}
+              </select>
+            </div>
           </div>
 
           <div style={{ marginBottom: "1.25rem" }}>
@@ -169,20 +224,13 @@ export default function ProfilePage() {
           </div>
 
           <div style={{ marginBottom: "1.25rem" }}>
-            <label style={{ fontSize: "0.8rem", color: "var(--text-muted)", display: "block", marginBottom: "0.4rem" }}>
-              <User size={12} style={{ display: "inline", marginRight: "4px" }} /> 이름
+            <label style={{ fontSize: "0.80rem", fontWeight: "700", color: "#64748b", display: "block", marginBottom: "0.40rem" }}>
+              <User size={12} style={{ display: "inline", marginRight: "4px" }} /> 성함 (수정 불가)
             </label>
-            <input value={name} readOnly placeholder="홍길동"
-              style={{ width: "100%", padding: "0.6rem 0.8rem", borderRadius: "8px", background: "rgba(0,0,0,0.2)", border: "1px solid var(--surface-border)", color: "var(--text-muted)", fontSize: "0.9rem" }} />
+            <input value={name} readOnly
+              style={{ width: "100%", padding: "0.75rem", borderRadius: "10px", background: "rgba(0,0,0,0.05)", border: "1px solid #e2e8f0", color: "#64748b", fontSize: "0.9rem", fontWeight: "600" }} />
           </div>
 
-          <div style={{ marginBottom: "1.5rem" }}>
-            <label style={{ fontSize: "0.8rem", color: "var(--text-muted)", display: "block", marginBottom: "0.4rem" }}>
-              <Phone size={12} style={{ display: "inline", marginRight: "4px" }} /> 휴대폰 번호
-            </label>
-            <input value={phone} readOnly placeholder="010-1234-5678" type="tel"
-              style={{ width: "100%", padding: "0.6rem 0.8rem", borderRadius: "8px", background: "rgba(0,0,0,0.2)", border: "1px solid var(--surface-border)", color: "var(--text-muted)", fontSize: "0.9rem" }} />
-          </div>
 
           {/* 알림 설정 */}
           <div style={{ padding: "1rem", borderRadius: "10px", background: "rgba(255,255,255,0.03)", border: "1px solid var(--surface-border)", marginBottom: "1.5rem", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -192,12 +240,23 @@ export default function ProfilePage() {
                 <span style={{ fontSize: "0.9rem", fontWeight: "600" }}>푸시 알림 수신 동의</span>
               </div>
               <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", margin: 0 }}>
-                매일 오전 새 공고 수집 후 SMS/푸시 알림을 받습니다.
+                매일 오전 새공고 수집후 푸시 알림을 받습니다.
               </p>
             </div>
             
-            {/* Toggle Switch */}
-            <div onClick={() => setPushEnabled(!pushEnabled)} style={{ 
+            <div onClick={async () => {
+              if (!pushEnabled) {
+                const sub = await subscribeUserToPush();
+                if (sub) {
+                  setPushEnabled(true);
+                  alert("푸시 알림이 설정되었습니다.");
+                } else {
+                  alert("푸시 알림 설정에 실패했습니다. 권한을 확인해주세요.");
+                }
+              } else {
+                setPushEnabled(false);
+              }
+            }} style={{ 
               width: "44px", height: "24px", borderRadius: "12px", background: pushEnabled ? "#10b981" : "rgba(255,255,255,0.1)", 
               position: "relative", cursor: "pointer", transition: "all 0.3s" 
             }}>
@@ -266,7 +325,7 @@ export default function ProfilePage() {
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
               {favs.map(f => (
-                <div key={f.id} className="glass-panel" style={{ padding: "1.25rem", display: "flex", gap: "1rem", alignItems: "flex-start" }}>
+                <div key={f.id} className="glass-panel" style={{ padding: isMobile ? "1rem" : "1.25rem", display: "flex", flexWrap: isMobile ? "wrap" : "nowrap", gap: "1rem", alignItems: "flex-start" }}>
                   <div style={{ flex: 1 }}>
                     <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.4rem", flexWrap: "wrap" }}>
                       <span style={{ fontSize: "0.75rem", padding: "0.15rem 0.5rem", borderRadius: "4px",
@@ -288,11 +347,11 @@ export default function ProfilePage() {
                       {f.assigned_hq && <span>📍 {f.assigned_hq} {f.assigned_office}</span>}
                     </div>
                   </div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem", flexShrink: 0 }}>
+                  <div style={{ display: "flex", flexDirection: isMobile ? "row" : "column", gap: "0.4rem", flexShrink: 0, width: isMobile ? "100%" : "auto" }}>
                     <button onClick={() => router.push(`/dashboard/${f.id}`)}
-                      className="btn-primary" style={{ padding: "0.4rem 0.75rem", fontSize: "0.8rem" }}>상세보기</button>
+                      className="btn-primary" style={{ flex: 1, padding: "0.4rem 0.75rem", fontSize: "0.8rem", justifyContent: "center" }}>상세보기</button>
                     <button onClick={() => removeFav(f.id)}
-                      style={{ padding: "0.4rem 0.75rem", fontSize: "0.8rem", borderRadius: "8px", background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", color: "#f87171", cursor: "pointer" }}>
+                      style={{ flex: 1, padding: "0.4rem 0.75rem", fontSize: "0.8rem", borderRadius: "8px", background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", color: "#f87171", cursor: "pointer", display: "flex", justifyContent: "center", alignItems: "center" }}>
                       ❤️ 해제
                     </button>
                   </div>

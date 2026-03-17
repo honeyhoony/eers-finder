@@ -29,6 +29,14 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [timeLeft, setTimeLeft] = useState(300); // 5분 = 300초
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
 
   useEffect(() => {
     let timer: NodeJS.Timeout;
@@ -57,7 +65,6 @@ export default function LoginPage() {
     setError(null);
     if (!emailId.trim()) return setError("이메일을 입력해 주세요.");
     if (!name.trim()) return setError("성명을 입력해 주세요.");
-    if (!phone.trim()) return setError("전화번호를 입력해 주세요.");
     if (!hq || !office) return setError("소속 본부와 사업소를 모두 선택해 주세요.");
 
     setLoading(true);
@@ -111,8 +118,8 @@ export default function LoginPage() {
         <div style={{ position: "absolute", bottom: "10%", right: "15%", width: "400px", height: "400px", background: "rgba(59,130,246,0.05)", borderRadius: "50%", filter: "blur(100px)" }} />
       </div>
 
-      <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} className="glass-panel" style={{ width: "100%", maxWidth: "560px", padding: "2.5rem", borderRadius: "24px", background: "white", position: "relative", zIndex: 1, boxShadow: "0 25px 50px -12px rgba(0,0,0,0.25)" }}>
-        <div style={{ textAlign: "center", marginBottom: "2rem" }}>
+      <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} className="glass-panel" style={{ width: "100%", maxWidth: "560px", padding: isMobile ? "1.5rem" : "2.5rem", borderRadius: "24px", background: "white", position: "relative", zIndex: 1, boxShadow: "0 25px 50px -12px rgba(0,0,0,0.25)" }}>
+        <div style={{ textAlign: "center", marginBottom: isMobile ? "1.5rem" : "2rem" }}>
           <div style={{ display: "inline-flex", padding: "0.75rem", background: "rgba(16,185,129,0.1)", borderRadius: "16px", color: "#10b981", marginBottom: "1rem" }}>
             <ShieldCheck size={40} />
           </div>
@@ -136,7 +143,7 @@ export default function LoginPage() {
                 </div>
               </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "1rem" }}>
                 <div>
                   <label style={{ fontSize: "0.85rem", fontWeight: "800", color: "#475569", marginBottom: "0.5rem", display: "block" }}>성명</label>
                   <div style={{ position: "relative" }}>
@@ -144,18 +151,11 @@ export default function LoginPage() {
                     <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="홍길동" required style={{ width: "100%", padding: "0.85rem 1rem 0.85rem 2.8rem", borderRadius: "12px", border: "1.5px solid #e2e8f0", fontSize: "1rem", color: "#000", outline: "none" }} />
                   </div>
                 </div>
-                <div>
-                  <label style={{ fontSize: "0.85rem", fontWeight: "800", color: "#475569", marginBottom: "0.5rem", display: "block" }}>전화번호 (Push 알람 수신용)</label>
-                  <div style={{ position: "relative" }}>
-                    <Phone size={18} style={{ position: "absolute", left: "1rem", top: "50%", transform: "translateY(-50%)", color: "#94a3b8" }} />
-                    <input type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="01012345678" required style={{ width: "100%", padding: "0.85rem 1rem 0.85rem 2.8rem", borderRadius: "12px", border: "1.5px solid #e2e8f0", fontSize: "1rem", color: "#000", outline: "none" }} />
-                  </div>
-                </div>
               </div>
 
               <div>
                 <label style={{ fontSize: "0.85rem", fontWeight: "800", color: "#475569", marginBottom: "0.6rem", display: "block" }}>소속 본부</label>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: "0.4rem", padding: "0.25rem" }}>
+                <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(3, 1fr)" : "repeat(5, 1fr)", gap: "0.4rem", padding: "0.25rem" }}>
                   {HQ_LIST.map(h => (
                     <button key={h} type="button" onClick={() => { setHq(h); setOffice(""); }} style={{ padding: "0.6rem 0.2rem", fontSize: "0.8rem", borderRadius: "8px", fontWeight: "800", cursor: "pointer", transition: "0.15s", background: hq === h ? "#3b82f6" : "#f1f5f9", color: hq === h ? "white" : "#475569", border: hq === h ? "1px solid #3b82f6" : "1px solid #e2e8f0" }}>{h.replace("본부", "")}</button>
                   ))}
@@ -165,7 +165,7 @@ export default function LoginPage() {
               {hq && (
                 <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
                   <label style={{ fontSize: "0.85rem", fontWeight: "800", color: "#475569", marginBottom: "0.6rem", display: "block" }}>사업소 (지사)</label>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "0.4rem", maxHeight: "250px", overflowY: "auto", padding: "0.5rem", background: "#f8fafc", borderRadius: "12px", border: "1px solid #e2e8f0" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(3, 1fr)", gap: "0.4rem", maxHeight: "250px", overflowY: "auto", padding: "0.5rem", background: "#f8fafc", borderRadius: "12px", border: "1px solid #e2e8f0" }}>
                     {getOfficeList(hq).map(o => (
                       <button key={o} type="button" onClick={() => setOffice(o)} style={{ padding: "0.7rem 0.5rem", fontSize: "0.8rem", borderRadius: "8px", fontWeight: "700", textAlign: "center", cursor: "pointer", transition: "0.15s", background: office === o ? "#3b82f6" : "white", color: office === o ? "white" : "#64748b", border: office === o ? "1px solid #3b82f6" : "1px solid #e2e8f0" }}>{o}</button>
                     ))}

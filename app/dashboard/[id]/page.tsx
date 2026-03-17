@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronRight, ArrowLeft, Building2, Calendar, DollarSign, Info, MapPin, Search, Zap, Package, Tag, Lightbulb, User, Phone, Mail, ExternalLink, RefreshCw, Copy, CheckCircle, CheckCircle2, ChevronDown, ChevronUp, Printer, Globe, Heart, FileText } from "lucide-react";
+import { ChevronRight, ArrowLeft, Building2, Calendar, DollarSign, Info, MapPin, Search, Zap, Package, Tag, Lightbulb, User, Phone, Mail, ExternalLink, RefreshCw, Copy, CheckCircle, CheckCircle2, ChevronDown, ChevronUp, Printer, Globe, Heart, FileText, X } from "lucide-react";
 import KeaDocsSection from "./KeaDocsSection";
+import SubsidyCalculator from "./SubsidyCalculator";
 import { OFFICE_CONTACTS } from "@/utils/office_data";
 
 // ── Notice 타입 (database.py 컬럼 전부 반영) ──
@@ -60,9 +61,17 @@ const DEVICE_KEYWORDS = [
 ];
 
 function KaptAptInfo({ kaptCode }: { kaptCode: string | null }) {
+  const [isMobile, setIsMobile] = useState(false);
   const [basic, setBasic] = useState<any>(null);
   const [history, setHistory] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
 
   useEffect(() => {
     if (!kaptCode) return;
@@ -89,12 +98,12 @@ function KaptAptInfo({ kaptCode }: { kaptCode: string | null }) {
   if (!basic) return null;
 
   return (
-    <div style={{ marginTop: "1.5rem", padding: "1.5rem", background: "#f8fafc", borderRadius: "16px", border: "1px solid #e2e8f0" }}>
-      <h3 style={{ fontSize: "1rem", fontWeight: "800", color: "#1e293b", marginBottom: "1rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+    <div style={{ marginTop: "1.5rem", padding: isMobile ? "1rem" : "1.5rem", background: "#f8fafc", borderRadius: "16px", border: "1px solid #e2e8f0" }}>
+      <h3 style={{ fontSize: isMobile ? "0.9rem" : "1rem", fontWeight: "800", color: "#1e293b", marginBottom: "1rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
         🏢 단지 상세 정보 (K-APT 연동)
       </h3>
       
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1.5rem" }}>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: "0.75rem", marginBottom: "1.5rem" }}>
         <div style={{ background: "white", padding: "1rem", borderRadius: "12px", border: "1px solid #f1f5f9" }}>
           <div style={{ fontSize: "0.75rem", color: "#64748b", marginBottom: "0.25rem" }}>승강기 대수</div>
           <div style={{ fontSize: "1.2rem", fontWeight: "800", color: "#2563eb" }}>{basic.kaptElevator_cnt || "미등록"} <span style={{ fontSize: "0.9rem", color: "#64748b" }}>대</span></div>
@@ -159,16 +168,16 @@ function ScoreBadge({ score }: { score: number }) {
   );
 }
 
-function InfoRow({ icon, label, value, copyable, link, tel }: {
+function InfoRow({ icon, label, value, copyable, link, tel, isMobile }: {
   icon: React.ReactNode; label: string; value: string | null | undefined;
-  copyable?: boolean; link?: string; tel?: boolean;
+  copyable?: boolean; link?: string; tel?: boolean; isMobile?: boolean;
 }) {
   if (!value) return null;
   return (
     <div style={{ display: "flex", gap: "1rem", padding: "1rem 0", borderBottom: "1px solid var(--surface-border)", alignItems: "center" }}>
-      <div style={{ width: "120px", display: "flex", alignItems: "center", gap: "0.5rem", color: "var(--text-muted)", flexShrink: 0 }}>
+      <div style={{ width: isMobile ? "80px" : "120px", display: "flex", alignItems: "center", gap: "0.5rem", color: "var(--text-muted)", flexShrink: 0 }}>
         <div style={{ color: "var(--brand-primary)", display: "flex", alignItems: "center" }}>{icon}</div>
-        <span style={{ fontSize: "0.85rem", fontWeight: "600" }}>{label}</span>
+        <span style={{ fontSize: "0.8rem", fontWeight: "600" }}>{label}</span>
       </div>
       <div style={{ flex: 1, display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
         {link ? (
@@ -201,11 +210,13 @@ function InfoRow({ icon, label, value, copyable, link, tel }: {
 
 // 메일 초안 생성
 function buildMailDraft(n: Notice, profile: UserProfile | null): string {
-  const hqName = profile?.hq || "OO본부";
-  const officeName = profile?.office || "OO지사";
+  const hqName = profile?.hq || "";
+  const officeName = profile?.office || "";
   const userName = profile?.name || "홍길동";
 
-  return `안녕하십니까, 한국전력공사 ${hqName} ${officeName} EERS 담당자 ${userName}입니다.
+  const displayOffice = officeName ? `${hqName} ${officeName}` : (hqName || "한국전력공사");
+
+  return `안녕하십니까, 한국전력공사 ${displayOffice} EERS 담당자 ${userName}입니다.
 
 귀 기관에서 최근 진행하신 "${n.project_name}" 건과 관련하여, 한전의 고효율 기기 에너지 효율향상사업(EERS) 지원금 혜택을 안내 드리고자 연락 드렸습니다.
 
@@ -215,17 +226,19 @@ function buildMailDraft(n: Notice, profile: UserProfile | null): string {
 
 감사합니다.
 
-[문의처] 한국전력공사 ${officeName} (${n.assigned_office || "지사"})`;
+[문의처] 한국전력공사 ${displayOffice}`;
 }
 
 // 전화 스크립트 생성
 function buildCallScript(n: Notice, profile: UserProfile | null): string {
-  const hqName = profile?.hq || "OO본부";
-  const officeName = profile?.office || "OO지사";
+  const hqName = profile?.hq || "";
+  const officeName = profile?.office || "";
   const userName = profile?.name || "홍길동";
 
+  const displayOffice = officeName ? `${hqName} ${officeName}` : (hqName || "한국전력공사");
+
   return `[전화 시작]
-"안녕하십니까, 한국전력공사 ${hqName} ${officeName} EERS 담당자 ${userName}입니다."
+"안녕하십니까, 한국전력공사 ${displayOffice} EERS 담당자 ${userName}입니다."
 
 [목적 설명]
 "최근 진행하신 ${n.project_name} 건과 관련하여, 한전에서 지원하는 고효율 기기 에너지 효율향상사업 대상 여부를 안내드리고자 연락드렸습니다."
@@ -286,6 +299,7 @@ function KeaInlineSearch() {
 export default function DetailPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const id = params?.id as string;
   const supabase = createClient();
 
@@ -298,8 +312,19 @@ export default function DetailPage() {
   const [copied, setCopied] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [analyzeMsg, setAnalyzeMsg] = useState<string | null>(null);
-  const [aiResult, setAiResult] = useState<{score: number; reason: string; tips: string} | null>(null);
   const [kaptCopied, setKaptCopied] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+  
+  // KEA 자동 조회 관련
+  const [keaResults, setKeaResults] = useState<any[] | null>(null);
+  const [keaLoading, setKeaLoading] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
 
   useEffect(() => {
     if (!id) return;
@@ -325,6 +350,35 @@ export default function DetailPage() {
     };
     fetchData();
   }, [id, supabase]);
+
+  // 자동 분석 처리 (모바일 등에서 넘어올 때)
+  useEffect(() => {
+    if (notice && !loading && searchParams.get("analyze") === "true" && !notice.ai_suitability_reason && !analyzing) {
+      handleAnalyze();
+    }
+  }, [notice, loading, searchParams]);
+
+  // 모델명이 있을 경우 KEA 자동 조회
+  useEffect(() => {
+    if (notice?.model_name && notice.model_name !== "N/A" && !keaResults && !keaLoading) {
+      const autoSearchKea = async () => {
+        setKeaLoading(true);
+        try {
+          const res = await fetch(`/api/kea?q2=${encodeURIComponent(notice.model_name!)}`);
+          const data = await res.json();
+          if (res.ok) {
+            const items = Array.isArray(data.items) ? data.items : (data.items ? [data.items] : []);
+            setKeaResults(items);
+          }
+        } catch (e) {
+          console.error("KEA 자동 조회 실패", e);
+        } finally {
+          setKeaLoading(false);
+        }
+      };
+      autoSearchKea();
+    }
+  }, [notice, keaResults, keaLoading]);
 
   const toggleFav = async () => {
     if (!notice) return;
@@ -352,7 +406,6 @@ export default function DetailPage() {
       });
       const json = await res.json();
       if (res.ok) {
-        setAiResult({ score: json.score, reason: json.reason, tips: json.tips });
         setNotice(prev => prev ? {
           ...prev,
           ai_suitability_score: json.score,
@@ -432,7 +485,7 @@ export default function DetailPage() {
       </div>
 
       {/* 헤더 카드 */}
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="glass-panel" style={{ padding: "2rem", marginBottom: "1.5rem" }}>
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="glass-panel" style={{ padding: isMobile ? "1.25rem" : "2rem", marginBottom: "1.5rem" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "1.5rem", marginBottom: "1.5rem" }}>
           <div style={{ flex: "1 1 auto" }}>
             <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", marginBottom: "1rem" }}>
@@ -492,32 +545,51 @@ export default function DetailPage() {
         )}
       </motion.div>
 
+      {/* AI 분석 리포팅 */}
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
+        className="glass-panel" style={{ padding: "1.5rem", marginBottom: "1.5rem", background: "#fff", border: "2px solid #10b98140", boxShadow: "0 4px 20px rgba(16, 185, 129, 0.1)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem", flexWrap: "wrap", gap: "0.5rem" }}>
+          <h3 style={{ fontSize: "1rem", fontWeight: "700", display: "flex", alignItems: "center", gap: "0.5rem", margin: 0, color: "#000" }}>
+            🤖 AI 분석 리포팅
+          </h3>
+          <button onClick={handleAnalyze} disabled={analyzing}
+            style={{ padding: "0.5rem 1rem", borderRadius: "8px", fontSize: "0.85rem", background: analyzing ? "#f3f4f6" : "#ecfdf5", border: "1px solid #10b981", color: analyzing ? "#9ca3af" : "#059669", cursor: analyzing ? "wait" : "pointer", display: "flex", alignItems: "center", gap: "0.4rem" }}>
+            {analyzing ? "⏳ 분석 중..." : (notice.ai_suitability_reason ? "🔄 다시 분석" : "🤖 AI 분석 시작")}
+          </button>
+        </div>
+        {notice.ai_suitability_reason && (
+          <p style={{ fontSize: "0.92rem", lineHeight: 1.8, color: "#374151", whiteSpace: "pre-wrap", background: "#f8fafc", padding: "1rem", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+            {notice.ai_suitability_reason}
+          </p>
+        )}
+      </motion.div>
+
       {/* 수요기관 정보 */}
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
-        className="glass-panel" style={{ padding: "2rem", marginBottom: "1.5rem", background: "#ffffff" }}>
+        className="glass-panel" style={{ padding: isMobile ? "1.25rem" : "2rem", marginBottom: "1.5rem", background: "#ffffff" }}>
         <h3 style={{ fontSize: "1.1rem", fontWeight: "800", marginBottom: "1.5rem", display: "flex", alignItems: "center", gap: "0.6rem", color: "#000" }}>
           <Building2 size={20} color="var(--brand-primary)" /> 수요기관 및 상세 정보
         </h3>
         
         <div style={{ borderTop: "2px solid #f1f5f9" }}>
-          <InfoRow icon={<Building2 size={16} />} label="기관명" value={notice.client} copyable />
-          <InfoRow icon={<MapPin size={16} />} label="주소" value={notice.address} copyable />
-          <InfoRow icon={<Calendar size={16} />} label="공고일" value={notice.notice_date} />
-          <InfoRow icon={<DollarSign size={16} />} label="추정가격" value={fmtAmount(notice.amount)} />
+          <InfoRow icon={<Building2 size={16} />} label="기관명" value={notice.client} copyable isMobile={isMobile} />
+          <InfoRow icon={<MapPin size={16} />} label="주소" value={notice.address} copyable isMobile={isMobile} />
+          <InfoRow icon={<Calendar size={16} />} label="공고일" value={notice.notice_date} isMobile={isMobile} />
+          <InfoRow icon={<DollarSign size={16} />} label="추정가격" value={fmtAmount(notice.amount)} isMobile={isMobile} />
           
           <div style={{ marginTop: "1rem", paddingTop: "1rem", borderTop: "1px dashed #e2e8f0" }}>
              <h4 style={{ fontSize: "0.85rem", color: "var(--brand-primary)", marginBottom: "1rem" }}>연락처 정보</h4>
-             <InfoRow icon={<User size={16} />} label="기관 담당자" value={notice.manager_name || "확인 필요"} copyable />
-             <InfoRow icon={<Phone size={16} />} label="담당자 전화" value={notice.manager_phone || notice.phone_number} copyable tel />
-             <InfoRow icon={<Mail size={16} />} label="담당자 이메일" value={notice.manager_email} copyable />
+             <InfoRow icon={<User size={16} />} label="기관 담당자" value={notice.manager_name || "확인 필요"} copyable isMobile={isMobile} />
+             <InfoRow icon={<Phone size={16} />} label="담당자 전화" value={notice.manager_phone || notice.phone_number} copyable tel isMobile={isMobile} />
+             <InfoRow icon={<Mail size={16} />} label="담당자 이메일" value={notice.manager_email} copyable isMobile={isMobile} />
              {notice.client_fax && (
-               <InfoRow icon={<Printer size={16} />} label="팩스번호" value={notice.client_fax} copyable />
+               <InfoRow icon={<Printer size={16} />} label="팩스번호" value={notice.client_fax} copyable isMobile={isMobile} />
              )}
              {notice.client_url && (
-               <InfoRow icon={<Globe size={16} />} label="홈페이지" value={notice.client_url} link={notice.client_url} />
+               <InfoRow icon={<Globe size={16} />} label="홈페이지" value={notice.client_url} link={notice.client_url} isMobile={isMobile} />
              )}
              {notice.source_system === "K-APT" && (
-                <InfoRow icon={<Building2 size={16} />} label="관리소 전번" value={notice.phone_number} copyable tel />
+                <InfoRow icon={<Building2 size={16} />} label="관리소 전번" value={notice.phone_number} copyable tel isMobile={isMobile} />
              )}
           </div>
         </div>
@@ -600,27 +672,62 @@ export default function DetailPage() {
               <h4 style={{ margin: 0 }}>고효율 기기 인증 여부 최종 확인</h4>
             </div>
             <div style={{ background: "rgba(255,255,255,0.03)", padding: "1rem", borderRadius: "10px", border: "1px solid var(--surface-border)" }}>
-              {notice.model_name && notice.model_name !== "N/A" && (
-                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.75rem" }}>
-                  <span style={{ fontSize: "0.9rem", color: "var(--text-secondary)" }}>확보된 모델명: <strong style={{ color: "var(--brand-primary)" }}>{notice.model_name}</strong></span>
-                  <button onClick={() => copyText(notice.model_name || "", "모델명_가이드")} style={{ padding: "0.2rem 0.5rem", fontSize: "0.75rem", borderRadius: "4px", border: "1px solid #e2e8f0", background: "white", cursor: "pointer", display: "flex", alignItems: "center", gap: "0.2rem" }}>
-                    <Copy size={12}/> {copied === "모델명_가이드" ? "복사됨" : "복사하기"}
-                  </button>
+              {notice.model_name && notice.model_name !== "N/A" ? (
+                <div style={{ marginBottom: "1.25rem" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.75rem" }}>
+                    <span style={{ fontSize: "0.95rem", color: "var(--text-secondary)" }}>확보된 모델명: <strong style={{ color: "var(--brand-primary)", fontSize: "1.1rem" }}>{notice.model_name}</strong></span>
+                    <button onClick={() => copyText(notice.model_name || "", "모델명_가이드")} style={{ padding: "0.3rem 0.6rem", fontSize: "0.8rem", borderRadius: "6px", border: "1px solid #e2e8f0", background: "white", cursor: "pointer", display: "flex", alignItems: "center", gap: "0.3rem" }}>
+                      <Copy size={14}/> {copied === "모델명_가이드" ? "복사됨" : "복사"}
+                    </button>
+                  </div>
+                  
+                  {/* KEA 자동 조회 결과 표시 */}
+                  <div style={{ padding: "1rem", background: "white", borderRadius: "12px", border: "1px solid #e2e8f0" }}>
+                    <div style={{ fontSize: "0.85rem", fontWeight: "700", color: "#64748b", marginBottom: "0.6rem", display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                      <CheckCircle2 size={16} color={keaResults && keaResults.length > 0 ? "#10b981" : "#94a3b8"} />
+                      에너지공단 고효율 인증 여부
+                    </div>
+                    {keaLoading ? (
+                      <div style={{ fontSize: "0.85rem", color: "#64748b", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                        <RefreshCw size={14} className="animate-spin" /> 인증 정보 조회 중...
+                      </div>
+                    ) : keaResults && keaResults.length > 0 ? (
+                      <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                        <div style={{ fontSize: "0.9rem", color: "#059669", fontWeight: "800", background: "#ecfdf5", padding: "0.4rem 0.75rem", borderRadius: "6px", display: "inline-block", width: "fit-content" }}>
+                          ✅ 고효율 인증 모델 확인됨 ({keaResults.length}건)
+                        </div>
+                        {keaResults.slice(0, 2).map((item, i) => (
+                          <div key={i} style={{ fontSize: "0.85rem", color: "#475569", borderLeft: "3px solid #10b981", paddingLeft: "0.75rem", marginTop: "0.25rem" }}>
+                            <div style={{ fontWeight: "700" }}>{item.MODEL_TERM}</div>
+                            <div style={{ fontSize: "0.8rem", color: "#64748b" }}>인기제조사: {item.ENTE_TERM} | 효율: {item.EFIC}</div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: "0.85rem", color: "#ef4444", fontWeight: "600", background: "#fef2f2", padding: "0.4rem 0.75rem", borderRadius: "6px" }}>
+                        ⚠️ 인증 정보가 직접 매칭되지 않습니다. 아래에서 직접 검색해 보세요.
+                      </div>
+                    )}
+                  </div>
                 </div>
-              )}
-              <KeaInlineSearch />
+              ) : null}
+              
+              <div style={{ marginTop: notice.model_name && notice.model_name !== "N/A" ? "1rem" : 0 }}>
+                <div style={{ fontSize: "0.85rem", fontWeight: "700", color: "#475569", marginBottom: "0.75rem" }}>🔍 모델명 직접 검색</div>
+                <KeaInlineSearch />
+              </div>
             </div>
           </section>
 
           <section>
             <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.8rem" }}>
               <div style={{ width: "24px", height: "24px", borderRadius: "50%", background: "var(--brand-primary)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.8rem", color: "black", fontWeight: "bold" }}>2</div>
-              <h4 style={{ margin: 0 }}>예상 지원금 확인</h4>
+              <h4 style={{ margin: 0 }}>예상 지원금 확인 (시뮬레이션)</h4>
             </div>
-            <button onClick={() => window.open('/calculator', '_blank')}
-              style={{ width: "100%", padding: "0.75rem", borderRadius: "8px", background: "#065f46", color: "#6ee7b7", border: "1px solid #059669", cursor: "pointer", fontWeight: "600", fontSize: "0.9rem" }}>
-              💰 지원금 계산기 (새창 열기)
-            </button>
+            <SubsidyCalculator 
+              initialLedQty={notice.quantity || 1} 
+              projectName={notice.project_name} 
+            />
           </section>
 
           <section>
@@ -641,47 +748,30 @@ export default function DetailPage() {
             </div>
             <button onClick={() => setShowMail(true)}
               style={{ width: "100%", padding: "0.75rem", borderRadius: "8px", background: "rgba(59,130,246,0.1)", border: "1px solid rgba(59,130,246,0.3)", color: "#60a5fa", cursor: "pointer", fontWeight: "600", fontSize: "0.9rem" }}>
-              ✉️ 안내 메일 초안 보기 / 복사
+              ✉️ 안내 메일 초안 보기
             </button>
           </section>
         </div>
       </motion.div>
 
-      {/* AI 분석 리포팅 */}
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
-        className="glass-panel" style={{ padding: "1.5rem", marginBottom: "1.5rem", background: "#fff", border: "1px solid #e5e7eb" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem", flexWrap: "wrap", gap: "0.5rem" }}>
-          <h3 style={{ fontSize: "1rem", fontWeight: "700", display: "flex", alignItems: "center", gap: "0.5rem", margin: 0, color: "#000" }}>
-            🤖 AI 분석 리포팅
-          </h3>
-          <button onClick={handleAnalyze} disabled={analyzing}
-            style={{ padding: "0.5rem 1rem", borderRadius: "8px", fontSize: "0.85rem", background: analyzing ? "#f3f4f6" : "#ecfdf5", border: "1px solid #10b981", color: analyzing ? "#9ca3af" : "#059669", cursor: analyzing ? "wait" : "pointer", display: "flex", alignItems: "center", gap: "0.4rem" }}>
-            {analyzing ? "⏳ 분석 중..." : (notice.ai_suitability_reason ? "🔄 다시 분석" : "🤖 AI 분석 시작")}
-          </button>
-        </div>
-        {notice.ai_suitability_reason && (
-          <p style={{ fontSize: "0.92rem", lineHeight: 1.8, color: "#374151", whiteSpace: "pre-wrap", background: "#f8fafc", padding: "1rem", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
-            {notice.ai_suitability_reason}
-          </p>
-        )}
-      </motion.div>
 
       {/* 메일 모달 */}
       <AnimatePresence>
         {showMail && (
           <div style={{ position: "fixed", inset: 0, zIndex: 9999, background: "rgba(0,0,0,0.8)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", padding: "1rem" }}
             onClick={() => setShowMail(false)}>
-            <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="glass-panel" style={{ width: "100%", maxWidth: "680px", padding: "2rem", maxHeight: "80vh", overflowY: "auto", background: "white" }} onClick={e => e.stopPropagation()}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
-                <h2 style={{ fontSize: "1.2rem", fontWeight: "700", color: "#000" }}>📧 안내 메일 초안</h2>
-                <button onClick={() => copyText(buildMailDraft(notice, profile), "메일")} className="btn-primary" style={{ padding: "0.4rem 0.8rem", fontSize: "0.8rem" }}>
-                  {copied === "메일" ? "✅ 복사됨" : "전체 복사"}
-                </button>
+            <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="glass-panel" style={{ width: "100%", maxWidth: "680px", padding: "2rem", maxHeight: "90vh", overflowY: "auto", background: "white" }} onClick={e => e.stopPropagation()}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem" }}>
+                <h2 style={{ fontSize: "1.25rem", fontWeight: "800", color: "#000", margin: 0 }}>📧 안내 메일 초안</h2>
+                <button onClick={() => setShowMail(false)} style={{ background: "none", border: "none", cursor: "pointer" }}><X size={24} /></button>
               </div>
-              <pre style={{ whiteSpace: "pre-wrap", fontSize: "0.875rem", lineHeight: 1.7, color: "#334155", background: "#f8fafc", padding: "1rem", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+              <div style={{ background: "#f8fafc", padding: "1.5rem", borderRadius: "12px", border: "1px solid #e2e8f0", fontSize: "0.95rem", color: "#1e293b", lineHeight: 1.8, whiteSpace: "pre-wrap" }}>
                 {buildMailDraft(notice, profile)}
-              </pre>
-              <button onClick={() => setShowMail(false)} style={{ marginTop: "1rem", width: "100%", padding: "0.6rem", borderRadius: "8px", background: "#f1f5f9", border: "1px solid #e2e8f0", color: "#475569", cursor: "pointer", fontWeight: "700" }}>닫기</button>
+              </div>
+              <div style={{ marginTop: "1.5rem", display: "flex", gap: "0.5rem" }}>
+                <button onClick={() => copyText(buildMailDraft(notice, profile), "메일")} className="btn-primary" style={{ flex: 1, padding: "1rem", borderRadius: "12px", justifyContent: "center" }}><Mail size={18} /> 전체 복사하기</button>
+                <button onClick={() => setShowMail(false)} className="btn-secondary" style={{ flex: 1, padding: "1rem", borderRadius: "12px", justifyContent: "center" }}>닫기</button>
+              </div>
             </motion.div>
           </div>
         )}
@@ -700,12 +790,12 @@ export default function DetailPage() {
                 </button>
               </div>
               <div style={{ background: "#f8fafc", padding: "1.5rem", borderRadius: "8px", border: "1px solid #e2e8f0", fontSize: "1rem", color: "#1e293b", lineHeight: 1.8 }}>
-                <p style={{ margin: "0 0 0.5rem 0" }}><strong>[전화 시작]</strong></p>
-                <p style={{ margin: "0 0 1rem 0" }}>"안녕하십니까, 한국전력공사 <strong>{profile?.hq || "OO본부"} {profile?.office || "OO지사"}</strong> EERS 담당자 {profile?.name || "홍길동"}입니다."</p>
-                <p style={{ margin: "0 0 0.5rem 0" }}><strong>[목적 설명]</strong></p>
-                <p style={{ margin: "0 0 1rem 0" }}>"최근 진행하신 <strong>{notice.project_name}</strong> 건과 관련하여, 한전에서 지원하는 <strong>고효율 기기 에너지 효율향상사업</strong> 대상 여부를 안내드리고자 연락드렸습니다."</p>
-                <p style={{ margin: "0 0 0.5rem 0" }}><strong>[상담 안내]</strong></p>
-                <p style={{ margin: 0 }}>"해당 품목이 지원 대상일 경우 일정 금액의 지원금을 받으실 수 있습니다. 제도 관련하여 상세한 안내를 이메일로 보내드리거나 방문 상담이 가능할까요?"</p>
+                <p><strong>[전화 시작]</strong></p>
+                <p>"안녕하십니까, 한국전력공사 <strong>{profile?.office === "직할" ? (profile?.hq || "OO본부") : `${profile?.hq || ""} ${profile?.office || "OO지사"}`}</strong> EERS 담당자 {profile?.name || "홍길동"}입니다."</p>
+                <p><strong>[목적 설명]</strong></p>
+                <p>"최근 진행하신 <strong>{notice.project_name}</strong> 건과 관련하여, 한전에서 지원하는 <strong>고효율 기기 에너지 효율향상사업</strong> 대상 여부를 안내드리고자 연락드렸습니다."</p>
+                <p><strong>[상담 안내]</strong></p>
+                <p>"해당 품목이 지원 대상일 경우 일정 금액의 지원금을 받으실 수 있습니다. 제도 관련하여 상세한 안내를 이메일로 보내드리거나 방문 상담이 가능할까요?"</p>
               </div>
               <div style={{ marginTop: "1rem", display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
                 <a href={`tel:${notice.manager_phone || notice.phone_number}`} className="btn-primary" style={{ flex: 1, justifyContent: "center", padding: "0.8rem", textDecoration: "none" }}><Phone size={16} /> 담당자에게 바로 전화걸기</a>

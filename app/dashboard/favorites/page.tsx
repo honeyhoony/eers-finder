@@ -7,7 +7,7 @@ import { motion } from "framer-motion";
 import { ArrowLeft, Heart, Phone, Mail, Edit3, Save, X } from "lucide-react";
 import Link from "next/link";
 
-const STATUSES = ["미접촉", "전화완료", "메일발송", "방문예정", "진행중", "완료", "포기"];
+const STATUSES = ["전화완료", "메일발송", "방문예정", "진행중", "완료", "포기"];
 const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
   "미접촉":  { bg: "rgba(107,114,128,0.15)", color: "#9ca3af" },
   "전화완료": { bg: "rgba(59,130,246,0.15)",  color: "#60a5fa" },
@@ -151,7 +151,7 @@ export default function FavoritesPage() {
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
           {filtered.map(item => {
-            const sc = STATUS_COLORS[item.status] || STATUS_COLORS["미접촉"];
+            const sc = STATUS_COLORS[item.status] || { bg: "rgba(107,114,128,0.1)", color: "#9ca3af" };
             const n = item.notice;
             const isEditing = editId === item.id;
             return (

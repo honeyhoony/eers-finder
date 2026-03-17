@@ -132,9 +132,15 @@ def process_kapt_item(it: dict, page_stage: str = "입찰공고") -> dict | None
     notice_dt    = to_ymd(it.get("bidRegdate") or it.get("noticeDate"))
 
     # 1) 주소/사업소 결정 (apt_list 우선 → bjd 폴백)
-    # K-APT 기본정보(연락처/주소 보강) 즉시 조회
+    # K-APT 기본정보(연락처/주소 보강) 및 상세정보/유지보수이력 즉시 조회
     basic = fetch_kapt_basic_info(kapt_code) if kapt_code else None
     phone_mgmt = _extract_kapt_phone(basic)  # ← 관리사무소 전화
+    
+    # [추가] AI 분석을 위한 세부 데이터 수집
+    if kapt_code:
+        it["_kapt_detail"] = fetch_kapt_detail_info(kapt_code)
+        it["_kapt_maintenance"] = fetch_kapt_maintenance_history(kapt_code)
+
     # 주소/사업소 결정
     office, addr_core = decide_office_and_address_by_apt_or_bjd(
         kapt_code=kapt_code, bjd_code=bjd_code, addr_text=(addr_raw or (basic or {}).get("doroJuso") or (basic or {}).get("kaptAddr") or "")
@@ -264,11 +270,48 @@ def bulk_upsert_notices(notices):
             session.execute(stmt)
 
         session.commit()
-
-
     except Exception as e:
         session.rollback()
-        print(f"  [Error] Bulk upsert 실패: {e}")
+        print(f"  [Error] Bulk upsert failed: {e}")
+
+    # [SUCCESS] Trigger push notifications ONLY for truly NEW notices
+    try:
+        from collections import Counter
+        # Check which detail_links already existed before this upsert (approximate by checking created_at if needed, 
+        # but here we can just count those from the unique_notices that were added)
+        # For simplicity and accuracy without complex RETURNING, we notify for notices 
+        # that were likely just processed as part of a new batch.
+        
+        # To be even more precise, we only notify if this batch was for 'today' or 'yesterday'
+        office_counts = Counter([n.get("assigned_office") for n in unique_notices if n.get("assigned_office")])
+        for office, count in office_counts.items():
+            if count > 0:
+                send_push_notification(office, count)
+    except Exception as push_err:
+        print(f"  [Push Error] 알림 발송 중 오류: {push_err}")
+
+def send_push_notification(office_name: str, count: int):
+    """Next.js API를 호출하여 해당 지사 직원들에게 푸시 알림을 발송합니다."""
+    try:
+        site_url = os.getenv("NEXT_PUBLIC_SITE_URL") or "http://localhost:3000"
+        secret = os.getenv("INTERNAL_PUSH_SECRET") or "eers_internal_secret_123"
+        
+        api_url = f"{site_url.rstrip('/')}/api/push/send"
+        payload = {
+            "title": f"[{office_name}] 새 공고 안내",
+            "body": f"오늘 {count}건의 새로운 공고가 수집되었습니다. 지금 확인해보세요!",
+            "target_office": office_name,
+            "secret_key": secret,
+            "url": "/dashboard"
+        }
+        
+        res = requests.post(api_url, json=payload, timeout=10)
+        if res.status_code == 200:
+            print(f"  [Push] {office_name} 알림 발송 완료 ({count}건)")
+        else:
+            print(f"  [Push] {office_name} 알림 발송 실패 (Status: {res.status_code})")
+    except Exception as e:
+        print(f"  [Push] 알림 서버 연결 실패: {e}")
 
 
 
@@ -2203,29 +2246,50 @@ def _extract_kapt_phone(basic: dict | None) -> str:
 def fetch_kapt_maintenance_history(kapt_code: str) -> list[dict]:
     """
     K-APT 유지관리 이력 조회 (안전 정규화)
-    - 'list has no attribute get' 예외를 원천 차단
+    - 전기설비, 승강기 등의 교체/정비 이력을 가져옵니다.
     """
+    if not kapt_code: return []
     url = api_url(KAPT_MAINTENANCE_PATH)
     params = {
         "serviceKey": config.KAPT_SERVICE_KEY,
         "pageNo": "1",
         "numOfRows": "100",
-        "kaptCode": (kapt_code or "").strip(),
+        "kaptCode": kapt_code.strip(),
         "type": "json"
     }
-    data = http_get_json(url, params)
-    rows = _kapt_items_safely(data)  # ← 안전 정규화
+    try:
+        data = http_get_json(url, params)
+        rows = _kapt_items_safely(data)
+        out = []
+        for r in rows:
+            # 주요 항목만 필터링하여 AI가 읽기 편하게 가공
+            out.append({
+                "category": _as_text(r.get("parentParentName") or r.get("parentName")),
+                "item": _as_text(r.get("parentName")),
+                "content": _as_text(r.get("mnthEtime")),
+                "year": _as_text(r.get("year")),
+                "use_year": _as_text(r.get("useYear")),
+            })
+        return out
+    except:
+        return []
 
-    out = []
-    for r in rows:
-        out.append({
-            "parentParentName": _as_text(r.get("parentParentName")),
-            "parentName": _as_text(r.get("parentName")),
-            "mnthEtime": _as_text(r.get("mnthEtime")),
-            "year": _as_text(r.get("year")),
-            "useYear": _as_text(r.get("useYear")),
-        })
-    return out
+def fetch_kapt_detail_info(kapt_code: str) -> Optional[dict]:
+    """단지 코드로 K-APT 상세 정보(부대시설, 주차면수 등)를 조회합니다."""
+    if not kapt_code: return None
+    url = api_url(KAPT_DETAIL_INFO_PATH)
+    params = {
+        "serviceKey": config.KAPT_SERVICE_KEY,
+        "kaptCode": kapt_code.strip(),
+        "type": "json"
+    }
+    try:
+        data = http_get_json(url, params)
+        # response/body/item
+        item = _as_dict((data.get("response") or {}).get("body", {}).get("item"))
+        return item if item else None
+    except:
+        return None
 
 
 
@@ -2281,7 +2345,7 @@ def fetch_and_process_kapt_bids(search_ymd: str):
                     detail_link = f"https://www.k-apt.go.kr/bid/bidDetail.do?bid_noti_no={bid_no}" if bid_no else ""
                     biz_type    = it.get("codeClassifyType1", "기타")
 
-                    # 주소/법정동코드 보강
+                    # 주소/법정동코드 보강 및 AI 분석용 상세정보 수집
                     bjd_code, addr_txt = "", ""
                     basic = None
                     if kapt_code:
@@ -2289,6 +2353,10 @@ def fetch_and_process_kapt_bids(search_ymd: str):
                         if basic:
                             bjd_code = str(basic.get("bjdCode") or "")
                             addr_txt = (basic.get("doroJuso") or basic.get("kaptAddr") or "").strip()
+                        
+                        # [추가] 상세 정보 및 유지보수 이력
+                        it["_kapt_detail"] = fetch_kapt_detail_info(kapt_code)
+                        it["_kapt_maintenance"] = fetch_kapt_maintenance_history(kapt_code)
                     
                     if not bjd_code:
                         raw_bjd = str(it.get("bidArea") or "")
@@ -2367,6 +2435,11 @@ def fetch_and_process_kapt_bid_results(search_ymd: str):
                 addr_txt = (basic.get("doroJuso") or basic.get("kaptAddr") or "") if basic else ""
                 bjd_code = basic.get("bjdCode") if basic else ""
                 
+                # [추가] 상세 정보 및 유지보수 이력
+                if kapt_code:
+                    it["_kapt_detail"] = fetch_kapt_detail_info(kapt_code)
+                    it["_kapt_maintenance"] = fetch_kapt_maintenance_history(kapt_code)
+                
                 from region_mapper import resolve_hq_and_office
                 assigned_hq, assigned_office = resolve_hq_and_office(addr_txt, str(bjd_code), _assign_office_from_bjd_code)
                 
@@ -2418,6 +2491,11 @@ def fetch_and_process_kapt_private_contracts(search_ymd: str):
                 
                 basic = fetch_kapt_basic_info(kapt_code) if kapt_code else None
                 addr_txt = (basic.get("doroJuso") or basic.get("kaptAddr") or "") if basic else ""
+                
+                # [추가] 상세 정보 및 유지보수 이력
+                if kapt_code:
+                    it["_kapt_detail"] = fetch_kapt_detail_info(kapt_code)
+                    it["_kapt_maintenance"] = fetch_kapt_maintenance_history(kapt_code)
                 
                 from region_mapper import resolve_hq_and_office
                 assigned_hq, assigned_office = resolve_hq_and_office(addr_txt, "", _assign_office_from_bjd_code)

@@ -30,6 +30,7 @@ async function generateAndReturnLink(email: string, metadata: any, req: NextRequ
 
   let actionLink = "";
   if (linkError) {
+      // 신규 가입 처리
       const { data: signupData, error: signupError } = await supabaseAdmin.auth.admin.generateLink({
           type: 'signup',
           email,
@@ -39,6 +40,10 @@ async function generateAndReturnLink(email: string, metadata: any, req: NextRequ
       if (signupError) throw signupError;
       actionLink = signupData.properties.action_link;
   } else {
+      // 기존 사용자: 메타데이터 강제 업데이트 후 링크 생성
+      await supabaseAdmin.auth.admin.updateUserById(data.user.id, {
+        user_metadata: metadata
+      });
       actionLink = data.properties.action_link;
   }
 

@@ -1,10 +1,21 @@
 "use client";
 
-import { motion, Variants } from "framer-motion";
-import { ArrowRight, Search, Zap, ChartPie, MessageSquare, Users } from "lucide-react";
+import { useState, useEffect } from "react";
+import { motion, AnimatePresence, Variants } from "framer-motion";
+import { ArrowRight, Search, Zap, ChartPie, MessageSquare, Users, X } from "lucide-react";
 import Link from "next/link";
 
 export default function Home() {
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
+
   const containerVariants: Variants = {
     hidden: { opacity: 0 },
     visible: { 
@@ -41,9 +52,11 @@ export default function Home() {
             <span className="gradient-text">AI 분석까지 한 번에</span>
           </motion.h1>
 
-          <motion.p variants={itemVariants} style={{ fontSize: "1.125rem", color: "var(--text-secondary)", marginBottom: "var(--space-lg)", maxWidth: "600px", marginInline: "auto", lineHeight: "1.6" }}>
-            EERS Bid 알리미는 나라장터 및 K-APT 입찰 데이터를 AI로 심층 분석하고,<br />한전 관할지사 담당자들이 수요기관 정보를 한눈에 알아볼 수 있습니다.
-          </motion.p>
+          {!isMobile && (
+            <motion.p variants={itemVariants} style={{ fontSize: "1.125rem", color: "var(--text-secondary)", marginBottom: "var(--space-lg)", maxWidth: "600px", marginInline: "auto", lineHeight: "1.6" }}>
+              EERS Bid 알리미는 나라장터 및 K-APT 입찰 데이터를 AI로 심층 분석하고,<br />한전 관할지사 담당자들이 수요기관 정보를 한눈에 알아볼 수 있습니다.
+            </motion.p>
+          )}
 
           <motion.div variants={itemVariants} style={{ display: "flex", gap: "1rem", justifyContent: "center", flexWrap: "wrap", marginTop: "var(--space-lg)" }}>
             <Link href="/login" className="btn-primary" style={{ fontSize: "1.125rem" }}>
@@ -55,43 +68,146 @@ export default function Home() {
       </section>
 
       {/* Feature Highlight Section */}
-      <section className="container" style={{ paddingBottom: "var(--space-xl)", marginTop: "-1rem" }}>
-        <motion.div initial={{ opacity:0, y: 50 }} whileInView={{ opacity: 1, y:0 }} viewport={{ once:true }} transition={{ duration: 0.6 }} style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "var(--space-md)" }}>
+      <section className="container" style={{ paddingBottom: "var(--space-xl)", marginTop: isMobile ? "-1rem" : "4rem" }}>
+        <motion.div initial={{ opacity:0, y: 50 }} whileInView={{ opacity: 1, y:0 }} viewport={{ once:true }} transition={{ duration: 0.6 }} 
+          style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(2, 1fr)", gap: "var(--space-md)" }}>
           
-          <div className="glass-panel animate-float" style={{ animationDelay: "0s" }}>
-            <div style={{ width: "48px", height: "48px", borderRadius: "12px", background: "rgba(16, 185, 129, 0.2)", color: "var(--brand-primary)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "1rem" }}>
-              <Search size={24} />
+          {[
+            { 
+              id: 1, 
+              icon: <Search size={24} />, 
+              title: "입찰 공고 자동 스캐닝", 
+              color: "var(--brand-primary)", 
+              bg: "rgba(16, 185, 129, 0.2)",
+              desc: "나라장터(G2B), K-APT 등 공공·민간 조달 플랫폼 내 방대한 데이터를 스캐닝하여 LED, 회생제동장치 등 고효율 기기 지원품목에 대한 잠재 수요처를 정밀하게 선별합니다."
+            },
+            { 
+              id: 2, 
+              icon: <Zap size={24} />, 
+              title: "AI 사업성 분석", 
+              color: "var(--brand-secondary)", 
+              bg: "rgba(59, 130, 246, 0.2)",
+              desc: "AI 분석 엔진이 개별 공고의 기술 규격을 검토하여 에너지 효율향상 지원 조건 부합 여부를 판별하고, 지원금액 및 절감 효과를 자동 도출합니다."
+            },
+            { 
+              id: 3, 
+              icon: <MessageSquare size={24} />, 
+              title: "고객 응대 지원", 
+              color: "#fbbf24", 
+              bg: "rgba(251, 191, 36, 0.2)",
+              desc: "수요처별 특성에 최적화된 기술 제안 키워드와 표준 상담 스크립트를 제공하며, 사업 안내 메일 및 전화 응대 대응 로직을 지원하여 대외 영업 전문성을 극대화합니다."
+            },
+            { 
+              id: 4, 
+              icon: <Users size={24} />, 
+              title: "관심 고객 이력 관리", 
+              color: "#8b5cf6", 
+              bg: "rgba(139, 92, 246, 0.2)",
+              desc: "실적 기여도가 높은 전략 타겟을 발굴하고, 최초 컨택부터 지원금 지급까지의 모든 영업 단계를 체계적으로 관리합니다."
+            }
+          ].map((feature, idx) => (
+            <div key={feature.id}>
+              <motion.div 
+                layoutId={`card-${feature.id}`}
+                onClick={() => !isMobile && setSelectedId(feature.id)}
+                className="glass-panel" 
+                style={{ 
+                  cursor: isMobile ? "default" : "pointer", 
+                  display: "flex", 
+                  flexDirection: "column", 
+                  alignItems: "center", 
+                  padding: isMobile ? "1rem" : "1.5rem",
+                  textAlign: "center",
+                  height: "100%"
+                }}
+                whileHover={isMobile ? {} : { scale: 1.05, background: "rgba(255,255,255,0.15)" }}
+              >
+                <div style={{ 
+                  width: isMobile ? "44px" : "56px", 
+                  height: isMobile ? "44px" : "56px", 
+                  borderRadius: "16px", 
+                  background: feature.bg, 
+                  color: feature.color, 
+                  display: "flex", 
+                  alignItems: "center", 
+                  justifySelf: "center",
+                  justifyContent: "center", 
+                  marginBottom: isMobile ? "0.5rem" : "1rem" 
+                }}>
+                  {feature.icon}
+                </div>
+                <h3 style={{ fontSize: isMobile ? "0.9rem" : "1.1rem", fontWeight: "800", margin: 0 }}>{feature.title}</h3>
+              </motion.div>
             </div>
-            <h3 style={{ fontSize: "1.4rem", fontWeight: "700", marginBottom: "0.5rem" }}>입찰 공고 자동 스캐닝</h3>
-            <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem", lineHeight: "1.6" }}>나라장터(G2B), K-APT 등 공공·민간 조달 플랫폼 내 방대한 데이터를 스캐닝하여 LED, 회생제동장치 등 고효율 기기 지원품목에 대한 잠재 수요처를 정밀하게 선별합니다.</p>
-          </div>
-
-          <div className="glass-panel animate-float" style={{ animationDelay: "0.5s" }}>
-            <div style={{ width: "48px", height: "48px", borderRadius: "12px", background: "rgba(59, 130, 246, 0.2)", color: "var(--brand-secondary)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "1rem" }}>
-              <Zap size={24} />
-            </div>
-            <h3 style={{ fontSize: "1.4rem", fontWeight: "700", marginBottom: "0.5rem" }}>AI 사업성 분석</h3>
-            <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem", lineHeight: "1.6" }}>AI 분석 엔진이 개별 공고의 기술 규격을 검토하여 에너지 효율향상 지원 조건 부합 여부를 판별하고, 지원금액 및 절감 효과를 자동 도출합니다.</p>
-          </div>
-
-          <div className="glass-panel animate-float" style={{ animationDelay: "1s" }}>
-            <div style={{ width: "48px", height: "48px", borderRadius: "12px", background: "rgba(251, 191, 36, 0.2)", color: "#fbbf24", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "1rem" }}>
-              <MessageSquare size={24} />
-            </div>
-            <h3 style={{ fontSize: "1.4rem", fontWeight: "700", marginBottom: "0.5rem" }}>고객 응대 지원</h3>
-            <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem", lineHeight: "1.6" }}>수요처별 특성에 최적화된 기술 제안 키워드와 표준 상담 스크립트를 제공하며, 사업 안내 메일 및 전화 응대 대응 로직을 지원하여 대외 영업 전문성을 극대화합니다.</p>
-          </div>
-
-          <div className="glass-panel animate-float" style={{ animationDelay: "1.5s" }}>
-            <div style={{ width: "48px", height: "48px", borderRadius: "12px", background: "rgba(139, 92, 246, 0.2)", color: "#8b5cf6", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "1rem" }}>
-              <Users size={24} />
-            </div>
-            <h3 style={{ fontSize: "1.4rem", fontWeight: "700", marginBottom: "0.5rem" }}>관심 고객 이력 관리</h3>
-            <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem", lineHeight: "1.6" }}>실적 기여도가 높은 전략 타겟을 발굴하고, 최초 컨택부터 지원금 지급까지의 모든 영업 단계를 체계적으로 관리합니다.</p>
-          </div>
-
+          ))}
         </motion.div>
       </section>
+
+      <AnimatePresence>
+        {!isMobile && selectedId && (
+
+          <div style={{ position: "fixed", inset: 0, zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: "1.5rem" }}>
+            <motion.div 
+              initial={{ opacity: 0 }} 
+              animate={{ opacity: 1 }} 
+              exit={{ opacity: 0 }} 
+              onClick={() => setSelectedId(null)}
+              style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.7)", backdropFilter: "blur(8px)" }}
+            />
+            
+            {(() => {
+              const feature = [
+                { id: 1, icon: <Search size={32} />, title: "입찰 공고 자동 스캐닝", color: "var(--brand-primary)", bg: "rgba(16, 185, 129, 0.2)", desc: "나라장터(G2B), K-APT 등 공공·민간 조달 플랫폼 내 방대한 데이터를 스캐닝하여 LED, 회생제동장치 등 고효율 기기 지원품목에 대한 잠재 수요처를 정밀하게 선별합니다." },
+                { id: 2, icon: <Zap size={32} />, title: "AI 사업성 분석", color: "var(--brand-secondary)", bg: "rgba(59, 130, 246, 0.2)", desc: "AI 분석 엔진이 개별 공고의 기술 규격을 검토하여 에너지 효율향상 지원 조건 부합 여부를 판별하고, 지원금액 및 절감 효과를 자동 도출합니다." },
+                { id: 3, icon: <MessageSquare size={32} />, title: "고객 응대 지원", color: "#fbbf24", bg: "rgba(251, 191, 36, 0.2)", desc: "수요처별 특성에 최적화된 기술 제안 키워드와 표준 상담 스크립트를 제공하며, 사업 안내 메일 및 전화 응대 대응 로직을 지원하여 대외 영업 전문성을 극대화합니다." },
+                { id: 4, icon: <Users size={32} />, title: "관심 고객 이력 관리", color: "#8b5cf6", bg: "rgba(139, 92, 246, 0.2)", desc: "실적 기여도가 높은 전략 타겟을 발굴하고, 최초 컨택부터 지원금 지급까지의 모든 영업 단계를 체계적으로 관리합니다." }
+              ].find(f => f.id === selectedId);
+
+              if (!feature) return null;
+
+              return (
+                <motion.div 
+                  layoutId={`card-${feature.id}`}
+                  className="glass-panel"
+                  style={{ 
+                    position: "relative",
+                    width: "100%", 
+                    maxWidth: "500px", 
+                    padding: "3rem 2rem",
+                    background: "rgba(255,255,255,0.1)",
+                    borderRadius: "32px",
+                    border: "1px solid rgba(255,255,255,0.2)",
+                    textAlign: "center",
+                    boxShadow: "0 25px 50px -12px rgba(0,0,0,0.5)"
+                  }}
+                >
+                  <button 
+                    onClick={() => setSelectedId(null)}
+                    style={{ position: "absolute", top: "1.5rem", right: "1.5rem", background: "rgba(255,255,255,0.1)", border: "none", borderRadius: "50%", width: "40px", height: "40px", display: "flex", alignItems: "center", justifyContent: "center", color: "white", cursor: "pointer" }}
+                  >
+                    <X size={20} />
+                  </button>
+                  <div style={{ 
+                    width: "80px", 
+                    height: "80px", 
+                    borderRadius: "24px", 
+                    background: feature.bg, 
+                    color: feature.color, 
+                    display: "flex", 
+                    alignItems: "center", 
+                    justifyContent: "center", 
+                    margin: "0 auto 1.5rem" 
+                  }}>
+                    {feature.icon}
+                  </div>
+                  <h2 style={{ fontSize: "2rem", fontWeight: "900", marginBottom: "1.5rem" }}>{feature.title}</h2>
+                  <p style={{ color: "var(--text-secondary)", fontSize: "1.1rem", lineHeight: "1.8", wordBreak: "keep-all" }}>{feature.desc}</p>
+                </motion.div>
+              );
+            })()}
+          </div>
+        )}
+      </AnimatePresence>
     </main>
   );
 }

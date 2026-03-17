@@ -45,7 +45,9 @@ export default function AdminPage() {
       if (!user) { router.push("/login"); return; }
       
       const { data: p } = await supabase.from("profiles").select("*").eq("id", user.id).single();
-      if (!p || !["S","A"].includes(p.role)) { 
+      const isAdminEmail = ["jeon.bh@kepco.co.kr", "zzoajbh@naver.com"].includes(user.email || "");
+      
+      if (!p || (!["S","A"].includes(p.role) && !isAdminEmail)) { 
           alert("관리자 권한이 없습니다.");
           router.push("/dashboard"); 
           return; 

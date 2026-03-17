@@ -231,8 +231,9 @@ export async function POST(request: NextRequest) {
     const isPlaceholder = (k: string) => !k || k.includes("__") || k.includes("your-");
     
     if (isPlaceholder(keys.gemini) && isPlaceholder(keys.openai)) {
+      console.error("[analyze] No valid AI API keys found in environment");
       return NextResponse.json({
-        error: "AI API 키가 설정되지 않았습니다. .env.local 파일에 GEMINI_API_KEY 또는 OPENAI_API_KEY를 '진짜 키'로 입력하세요. (현재 sk-__ 형식의 placeholder가 감지됨)",
+        error: "AI API 키가 설정되지 않았습니다. Vercel 또는 .env 설정에서 GEMINI_API_KEY 또는 OPENAI_API_KEY를 확인하세요.",
       }, { status: 500 });
     }
 
@@ -309,14 +310,17 @@ export async function POST(request: NextRequest) {
       }, { status: 500 });
     }
 
-    // Supabase 업데이트 (notice_id 테이블에 ai_ fields가 있어야 함)
-    const { error: ue } = await supabase.from("notices").update({
+    // Supabase 업데이트
+    const updateData: any = {
       ai_suitability_score:  result.score,
       ai_suitability_reason: result.reason,
       ai_call_tips:          result.tips,
-      ai_keywords:           result.keywords.join(","),
-    }).eq("id", noticeId);
+    };
+    if (result.keywords && result.keywords.length > 0) {
+      updateData.ai_keywords = result.keywords.join(",");
+    }
 
+    const { error: ue } = await supabase.from("notices").update(updateData).eq("id", noticeId);
     if (ue) console.error("[analyze] update error:", ue.message);
 
     return NextResponse.json({ success: true, provider: usedProvider, ...result });

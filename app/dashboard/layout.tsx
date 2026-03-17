@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { LogOut, MapPin, X, Phone, Globe, Search } from "lucide-react";
+import { LogOut, MapPin, X, Phone, Globe, Search, Menu } from "lucide-react";
 import { OFFICE_CONTACTS } from "@/utils/office_data";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -18,6 +18,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [showContactModal, setShowContactModal] = useState(false);
   const [contactSearch, setContactSearch] = useState("");
+
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
 
   // 강제로 심플 화이트 테마(dashboard-theme) 적용
   useEffect(() => {
@@ -64,7 +73,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   );
 
   return (
-    <div className="dashboard-layout" style={{ minHeight: "100vh", display: "flex", flexDirection: "column", background: "#f8fafc" }}>
+    <div className="dashboard-layout" style={{ minHeight: "100vh", display: "flex", flexDirection: "column", background: "#f8fafc", position: "relative", overflow: "hidden" }}>
+      {/* Background Decorations for Premium Feel */}
+      {!isMobile && (
+        <>
+          <div className="orb orb-primary" style={{ opacity: 0.05, top: "20%", left: "-10%" }} />
+          <div className="orb orb-secondary" style={{ opacity: 0.05, bottom: "10%", right: "-5%" }} />
+        </>
+      )}
       <header style={{
         background: "white",
         borderBottom: "1px solid #e2e8f0",
@@ -74,25 +90,30 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       }}>
         {/* 상단: 로고 및 내비게이션 */}
         <div style={{
-          padding: "0.75rem 2rem",
+          padding: isMobile ? "0.75rem 1rem" : "0.75rem 2rem",
           display: "flex", justifyContent: "space-between", alignItems: "center",
         }}>
           <a href="/dashboard" style={{ display: "flex", alignItems: "center", gap: "0.4rem", textDecoration: "none" }}>
             <span style={{ fontSize: "1.2rem", fontWeight: "900", color: "#0f172a", letterSpacing: "-0.03em" }}>EERS Bid 알리미</span>
           </a>
 
-          <nav style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-            <button onClick={() => setShowContactModal(true)} style={{ 
-              padding: "0.5rem 0.9rem", fontSize: "0.845rem", borderRadius: "8px", 
-              background: "rgba(0,0,0,0.05)", border: "1px solid #e2e8f0", 
-              color: "#475569", cursor: "pointer", fontWeight: "600", 
-              display: "flex", alignItems: "center", gap: "0.4rem" 
-            }}>
-              📞 담당자 연락처
-            </button>
-            {navLink("/dashboard/favorites", "❤️ 관심")}
-            {navLink("/dashboard/docs", "📄 자료실")}
-            {(role === "S" || role === "A") && (
+          <nav style={{ display: "flex", gap: "0.4rem", alignItems: "center" }}>
+            {!isMobile && (
+              <>
+                <button onClick={() => setShowContactModal(true)} style={{ 
+                  padding: "0.5rem 0.9rem", fontSize: "0.845rem", borderRadius: "8px", 
+                  background: "rgba(0,0,0,0.05)", border: "1px solid #e2e8f0", 
+                  color: "#475569", cursor: "pointer", fontWeight: "600", 
+                  display: "flex", alignItems: "center", gap: "0.4rem" 
+                }}>
+                  📞 담당자 연락처
+                </button>
+                {navLink("/dashboard/favorites", "❤️ 관심")}
+                {navLink("/dashboard/docs", "📄 자료실")}
+              </>
+            )}
+            
+            {(role === "S" || role === "A") && !isMobile && (
               <a href="/dashboard/admin" style={{
                 padding: "0.5rem 0.9rem", fontSize: "0.845rem", borderRadius: "8px",
                 background: "rgba(251,191,36,0.1)", border: "1px solid rgba(251,191,36,0.3)", color: "#b45309",
@@ -101,45 +122,51 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 🛡️ 관리자
               </a>
             )}
-            <button onClick={() => setShowLogoutModal(true)} style={{ padding: "0.5rem 0.9rem", fontSize: "0.845rem", borderRadius: "8px", background: "white", border: "1px solid #e2e8f0", color: "#64748b", cursor: "pointer", fontWeight: "600" }}>
-              로그아웃
-            </button>
+            
+            {isMobile ? (
+              <button onClick={() => setShowLogoutModal(true)} style={{ padding: "0.4rem", color: "#64748b" }}>
+                <LogOut size={20} />
+              </button>
+            ) : (
+              <button onClick={() => setShowLogoutModal(true)} style={{ padding: "0.5rem 0.9rem", fontSize: "0.845rem", borderRadius: "8px", background: "white", border: "1px solid #e2e8f0", color: "#64748b", cursor: "pointer", fontWeight: "600" }}>
+                로그아웃
+              </button>
+            )}
           </nav>
         </div>
 
         {/* 하단: 사용자 소속 정보 (녹색 박스 디자인) */}
         {userEmail && (
           <div style={{
-            padding: "0.6rem 2rem",
+            padding: isMobile ? "0.5rem 1rem" : "0.6rem 2rem",
             background: "#ecfdf5",
             borderTop: "1px solid #d1fae5",
             borderBottom: "1px solid #d1fae5",
             display: "flex",
             alignItems: "center",
-            gap: "0.75rem",
+            gap: isMobile ? "0.4rem" : "0.75rem",
+            flexWrap: isMobile ? "wrap" : "nowrap"
           }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", background: "#10b981", color: "white", padding: "0.25rem 0.75rem", borderRadius: "99px", fontSize: "0.8rem", fontWeight: "800" }}>
-              <MapPin size={14} /> 한국전력공사
+            <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", background: "#10b981", color: "white", padding: "0.2rem 0.6rem", borderRadius: "99px", fontSize: "0.7rem", fontWeight: "800" }}>
+              <MapPin size={12} /> 한전
             </div>
-            <div style={{ fontSize: "0.9rem", color: "#065f46", fontWeight: "700" }}>
-              {userHq ? `${userHq} ` : ""} 
-              {userOffice ? `${userOffice} ` : ""} 
-              {userName ? `${userName} ` : "사용자"} 
-              <span style={{ fontWeight: "500", opacity: 0.8, marginLeft: "0.5rem" }}>({userEmail})</span>
+            <div style={{ fontSize: isMobile ? "0.8rem" : "0.9rem", color: "#065f46", fontWeight: "700", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", flex: 1 }}>
+              {userHq} {userOffice} {userName}
             </div>
-            <div style={{ flex: 1, display: "flex", justifyContent: "flex-end" }}>
+            {!isMobile && <span style={{ fontSize: "0.8rem", fontWeight: "500", opacity: 0.8 }}>({userEmail})</span>}
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
               <button onClick={() => router.push("/dashboard/profile")} style={{
-                padding: "0.4rem 0.8rem", fontSize: "0.8rem", borderRadius: "8px", background: "white", color: "#059669",
-                border: "1px solid #10b981", fontWeight: "700", cursor: "pointer", display: "flex", alignItems: "center", gap: "0.3rem"
+                padding: "0.3rem 0.6rem", fontSize: "0.75rem", borderRadius: "6px", background: "white", color: "#059669",
+                border: "1px solid #10b981", fontWeight: "700", cursor: "pointer"
               }}>
-                ⚙️ 내 정보
+                ⚙️ 정보
               </button>
             </div>
           </div>
         )}
       </header>
 
-      <main style={{ flex: 1, padding: "2rem", overflowY: "auto" }}>
+      <main style={{ flex: 1, padding: isMobile ? "1rem" : "2rem", overflowY: "auto" }}>
         {children}
       </main>
 
@@ -149,15 +176,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <div style={{ position: "fixed", inset: 0, zIndex: 10000, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", padding: "1.5rem" }}>
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }}
               style={{ width: "100%", maxWidth: "900px", maxHeight: "85vh", background: "white", borderRadius: "24px", display: "flex", flexDirection: "column", overflow: "hidden", boxShadow: "0 25px 50px -12px rgba(0,0,0,0.3)" }}>
-              <div style={{ padding: "1.5rem 2rem", background: "#f8fafc", borderBottom: "1px solid #e2e8f0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ padding: isMobile ? "1rem" : "1.5rem 2rem", background: "#f8fafc", borderBottom: "1px solid #e2e8f0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <div>
-                  <h2 style={{ fontSize: "1.4rem", fontWeight: "900", color: "#0f172a", marginBottom: "0.25rem" }}>한전 전국 사업소 담당자 연락처</h2>
-                  <p style={{ fontSize: "0.85rem", color: "#64748b" }}>전국 지역본부 및 지사별 EERS 담당 부서 연락처 정보입니다.</p>
+                  <h2 style={{ fontSize: isMobile ? "1.1rem" : "1.4rem", fontWeight: "900", color: "#0f172a", marginBottom: "0.25rem" }}>전국 사업소 연락처</h2>
+                  {!isMobile && <p style={{ fontSize: "0.85rem", color: "#64748b" }}>전국 지역본부 및 지사별 EERS 담당 부서 연락처 정보입니다.</p>}
                 </div>
-                <button onClick={() => setShowContactModal(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "#94a3b8" }}><X size={28} /></button>
+                <button onClick={() => setShowContactModal(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "#94a3b8" }}><X size={isMobile ? 24 : 28} /></button>
               </div>
 
-              <div style={{ padding: "1rem 2rem", background: "white", borderBottom: "1px solid #e2e8f0" }}>
+              <div style={{ padding: isMobile ? "0.75rem 1rem" : "1rem 2rem", background: "white", borderBottom: "1px solid #e2e8f0" }}>
                 <div style={{ position: "relative" }}>
                   <Search size={18} style={{ position: "absolute", left: "1rem", top: "50%", transform: "translateY(-50%)", color: "#94a3b8" }} />
                   <input type="text" placeholder="본부, 지사 또는 관할구역 검색..." value={contactSearch} onChange={(e) => setContactSearch(e.target.value)}
@@ -165,27 +192,44 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 </div>
               </div>
 
-              <div style={{ flex: 1, overflowY: "auto", padding: "0 2rem 2rem" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.9rem" }}>
-                  <thead style={{ position: "sticky", top: 0, background: "white", zIndex: 1, borderBottom: "2px solid #e2e8f0" }}>
-                    <tr>
-                      <th style={{ width: "15%", textAlign: "left", padding: "1rem", color: "#475569", fontWeight: "800", whiteSpace: "nowrap" }}>지역본부</th>
-                      <th style={{ width: "20%", textAlign: "left", padding: "1rem", color: "#475569", fontWeight: "800", whiteSpace: "nowrap" }}>지사</th>
-                      <th style={{ width: "25%", textAlign: "left", padding: "1rem", color: "#475569", fontWeight: "800", whiteSpace: "nowrap" }}>연락처</th>
-                      <th style={{ width: "40%", textAlign: "left", padding: "1rem", color: "#475569", fontWeight: "800" }}>관할 행정구역</th>
-                    </tr>
-                  </thead>
-                  <tbody>
+              <div style={{ flex: 1, overflowY: "auto", padding: isMobile ? "0 1rem 1rem" : "0 2rem 2rem" }}>
+                {isMobile ? (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", marginTop: "1rem" }}>
                     {filteredContacts.map((c, i) => (
-                      <tr key={i} style={{ borderBottom: "1px solid #f1f5f9", background: i % 2 === 0 ? "white" : "#f8fafc" }}>
-                        <td style={{ padding: "1rem", fontWeight: "700", color: "#1e293b" }}>{c.hq}</td>
-                        <td style={{ padding: "1rem", color: "#334155" }}>{c.office}</td>
-                        <td style={{ padding: "1rem", color: "#3b82f6", fontWeight: "700" }}>{c.phone}</td>
-                        <td style={{ padding: "1rem", color: "#64748b", fontSize: "0.8rem", lineHeight: "1.4" }}>{c.jurisdiction}</td>
-                      </tr>
+                      <div key={i} style={{ padding: "1rem", borderRadius: "12px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
+                          <span style={{ fontSize: "0.75rem", fontWeight: "800", color: "#3b82f6", background: "#eff6ff", padding: "0.2rem 0.5rem", borderRadius: "4px" }}>{c.hq}</span>
+                          <span style={{ fontSize: "0.9rem", fontWeight: "800", color: "#0f172a" }}>{c.office}</span>
+                        </div>
+                        <a href={`tel:${c.phone}`} style={{ display: "flex", alignItems: "center", gap: "0.4rem", color: "#2563eb", fontWeight: "700", fontSize: "1rem", textDecoration: "none" }}>
+                          <Phone size={14} /> {c.phone}
+                        </a>
+                        <div style={{ fontSize: "0.75rem", color: "#64748b", marginTop: "0.5rem", lineHeight: 1.4 }}>{c.jurisdiction}</div>
+                      </div>
                     ))}
-                  </tbody>
-                </table>
+                  </div>
+                ) : (
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.9rem" }}>
+                    <thead style={{ position: "sticky", top: 0, background: "white", zIndex: 1, borderBottom: "2px solid #e2e8f0" }}>
+                      <tr>
+                        <th style={{ width: "15%", textAlign: "left", padding: "1rem", color: "#475569", fontWeight: "800", whiteSpace: "nowrap" }}>지역본부</th>
+                        <th style={{ width: "20%", textAlign: "left", padding: "1rem", color: "#475569", fontWeight: "800", whiteSpace: "nowrap" }}>지사</th>
+                        <th style={{ width: "25%", textAlign: "left", padding: "1rem", color: "#475569", fontWeight: "800", whiteSpace: "nowrap" }}>연락처</th>
+                        <th style={{ width: "40%", textAlign: "left", padding: "1rem", color: "#475569", fontWeight: "800" }}>관할 행정구역</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredContacts.map((c, i) => (
+                        <tr key={i} style={{ borderBottom: "1px solid #f1f5f9", background: i % 2 === 0 ? "white" : "#f8fafc" }}>
+                          <td style={{ padding: "1rem", fontWeight: "700", color: "#1e293b" }}>{c.hq}</td>
+                          <td style={{ padding: "1rem", color: "#334155" }}>{c.office}</td>
+                          <td style={{ padding: "1rem", color: "#3b82f6", fontWeight: "700" }}>{c.phone}</td>
+                          <td style={{ padding: "1rem", color: "#64748b", fontSize: "0.8rem", lineHeight: "1.4" }}>{c.jurisdiction}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
               </div>
             </motion.div>
           </div>

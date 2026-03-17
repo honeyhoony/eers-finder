@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
 
-export default function AuthCallbackPage() {
+function AuthCallbackContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [status, setStatus] = useState("인증 정보를 확인 중입니다...");
@@ -24,6 +24,31 @@ export default function AuthCallbackPage() {
         return;
       }
 
+      const syncProfile = async () => {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+          const user = session.user;
+          const metadata = user.user_metadata;
+          
+          try {
+            // 프로필 정보 강제 동기화 (upsert)
+            const { error: upsertError } = await supabase.from("profiles").upsert({
+              id: user.id,
+              email: user.email,
+              name: metadata?.name || null,
+              hq: metadata?.hq || null,
+              office: metadata?.office || null,
+              updated_at: new Date().toISOString()
+            }, { onConflict: 'id' });
+
+            if (upsertError) throw upsertError;
+            console.log("Profile sync complete");
+          } catch (e) {
+            console.error("Profile sync error:", e);
+          }
+        }
+      };
+
       // 2. PKCE용 code 확인 (가장 일반적인 경우)
       const code = searchParams.get("code");
       if (code) {
@@ -37,8 +62,10 @@ export default function AuthCallbackPage() {
           return;
         }
         
-        setStatus("로그인이 완료되었습니다! 대시보드로 이동합니다...");
-        // PKCE 교환 후 쿠키가 브라우저에 확실히 고착될 수 있도록 강제 지연 후 전체 페이지 리로드
+        setStatus("로그인이 완료되었습니다! 프로필 정보를 동기화하는 중...");
+        await syncProfile();
+        
+        setStatus("동기화 완료! 대시보드로 이동합니다...");
         setTimeout(() => {
           window.location.href = "/dashboard";
         }, 1200);
@@ -46,7 +73,7 @@ export default function AuthCallbackPage() {
       }
 
       // 3. Implicit Flow용 fragment(#) 확인
-      const hash = window.location.hash;
+      const hash = typeof window !== 'undefined' ? window.location.hash : '';
       if (hash && hash.includes("access_token")) {
         const params = new URLSearchParams(hash.replace("#", "?"));
         const accessToken = params.get("access_token");
@@ -65,8 +92,9 @@ export default function AuthCallbackPage() {
             setErrorDetails(sessionError.message);
             setTimeout(() => router.push("/login"), 5000);
           } else {
-            setStatus("인증 완료! 대시보드로 이동합니다...");
-            // 세션 설정 후 쿠키 저장 시간을 위해 강제 지연 후 전체 페이지 리로드
+            setStatus("인증 완료! 프로필 정보를 동기화하는 중...");
+            await syncProfile();
+            setStatus("대시보드로 이동합니다...");
             setTimeout(() => {
               window.location.href = "/dashboard";
             }, 1200);
@@ -78,6 +106,8 @@ export default function AuthCallbackPage() {
       // 4. 이미 세션이 있는지 최종 확인
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
+        setStatus("로그인 완료! 프로필 정보를 동기화하는 중...");
+        await syncProfile();
         setStatus("이미 로그인되어 있습니다. 대시보드로 이동합니다...");
         window.location.href = "/dashboard";
       } else {
@@ -109,5 +139,17 @@ export default function AuthCallbackPage() {
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
       `}</style>
     </div>
+  );
+}
+
+export default function AuthCallbackPage() {
+  return (
+    <Suspense fallback={
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', background: '#0f172a', color: 'white' }}>
+        Loading...
+      </div>
+    }>
+      <AuthCallbackContent />
+    </Suspense>
   );
 }
