@@ -4197,39 +4197,47 @@ def fetch_data_for_stage(search_date: str, stage_config: dict):
 # collect_data.py 파일 맨 아래에 추가
 
 if __name__ == "__main__":
-    from datetime import datetime
+    from datetime import datetime, timedelta
 
     print("="*50)
-    print("COLLECT_DATA.PY 단독 실행을 시작합니다.")
+    print("COLLECT_DATA.PY 실행을 시작합니다. (최근 3일 데이터 수집)")
     print("="*50)
     
-    # 오늘 날짜를 자동으로 사용합니다.
     today = datetime.now()
-    search_date = today.strftime("%Y%m%d")
+    # 최근 3일간의 날짜 리스트 (오늘, 어제, 그저께)
+    dates_to_collect = [
+        (today - timedelta(days=2)).strftime("%Y%m%d"),
+        (today - timedelta(days=1)).strftime("%Y%m%d"),
+        today.strftime("%Y%m%d")
+    ]
 
-    print(f"\n>>> 수집 날짜: {search_date} (오늘)\n")
+    for search_date in dates_to_collect:
+        print("\n" + "#"*60)
+        print(f"### [날짜별 수집 시작] : {search_date} ###")
+        print("#"*60)
 
-    # ⚠️ 주의: drop_all은 기존 데이터를 전체 삭제합니다. 운영 시 절대 사용 금지.
-    # Base.metadata.drop_all(engine)
-    # Base.metadata.create_all(engine)
+        print("\n--- 나라장터(G2B) 데이터 수집 ---")
+        # fetch_and_process_order_plans(search_date)   # 발주계획 (스킵)
+        fetch_and_process_bid_notices(search_date)
+        fetch_and_process_contracts(search_date)
+        fetch_and_process_delivery_requests(search_date)
 
-    print("\n--- 나라장터(G2B) 데이터 수집 ---")
-    # fetch_and_process_order_plans(search_date)   # 발주계획 (스킵)
-    fetch_and_process_bid_notices(search_date)
-    fetch_and_process_contracts(search_date)
-    fetch_and_process_delivery_requests(search_date)
+        print("\n--- 공동주택(K-APT) 데이터 수집 ---")
+        fetch_and_process_kapt_bids(search_date)
+        # fetch_and_process_kapt_private_contracts(search_date)   # 수의계약 (스킵)
+        fetch_and_process_kapt_bid_results(search_date)
 
-    print("\n--- 공동주택(K-APT) 데이터 수집 ---")
-    fetch_and_process_kapt_bids(search_date)
-    # fetch_and_process_kapt_private_contracts(search_date)   # 수의계약 (스킵)
-    fetch_and_process_kapt_bid_results(search_date)
+        print("\n--- 민간입찰(누리장터) 데이터 수집 ---")
+        fetch_and_process_nuri_bids(search_date)
+        fetch_and_process_nuri_success_bids(search_date)
+        fetch_and_process_nuri_contracts(search_date)
 
-    print("\n--- 민간입찰(누리장터) 데이터 수집 ---")
-    fetch_and_process_nuri_bids(search_date)
-    fetch_and_process_nuri_success_bids(search_date)
-    fetch_and_process_nuri_contracts(search_date)
+        print(f"\n>>> {search_date} 데이터 수집 완료!")
 
-    print(f"\n>>> 수집 완료!")
+    print("\n" + "="*50)
+    print("전체 일정 수집 완료!")
+    print("="*50)
+
     
     session = Session()
     kapt_count = session.query(Notice).filter(Notice.source_system == 'K-APT').count()
