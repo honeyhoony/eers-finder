@@ -41,6 +41,14 @@ def print_exclude_once(base_notice: dict, client_name: Optional[str], addr_or_ma
 
 EXCLUDE_LOG_MAX = 0 if not LOG_EXCLUDES else 50
 
+# ==============================================================================
+# VERSION MARKER (FOR DEBUGGING GITHUB ACTIONS SYNC)
+# ==============================================================================
+print("\n" + "@" * 60)
+print(">>> EERS COLLECTOR: LATEST VERSION (STABLE FIX 2026-03-19-1140)")
+print("@" * 60 + "\n")
+# ==============================================================================
+
 def check_env_vars():
     print("\n[Env Check] 환경변수 상태 확인:")
     essential = [
