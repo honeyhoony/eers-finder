@@ -57,8 +57,8 @@ def check_env_vars():
 
 # 파일 상단 유틸
 import os, json, unicodedata
-def _norm(s: str) -> str:
-    return unicodedata.normalize("NFKC", (s or "").strip())
+def _norm(s: Any) -> str:
+    return unicodedata.normalize("NFKC", _as_text(s))
 
 def load_school_map() -> dict[str, str]:
     # 1) 파이썬 모듈 우선
@@ -355,9 +355,9 @@ API_SCHEME = "http"   # 내부망/방화벽 환경 고려
 
 
 # === K-APT 최소 로그 포맷 (주소를 끝에 붙여서 출력) ===
-def _fmt_tail(addr: str) -> str:
-    addr = _as_text(addr).strip()
-    return f" - {addr}" if addr else ""
+def _fmt_tail(addr: Any) -> str:
+    a = _as_text(addr)
+    return f" - {a}" if a else ""
 
 def log_kapt_excluded(name: str, addr: str = ""):
     if not LOG_EXCLUDES:
@@ -1623,11 +1623,15 @@ def _pick_addr_by_priority(client_code: Optional[str], mall_addr: Optional[str])
     """
     반환: (선택주소, source)  # source: 'usr' | 'mall' | 'none'
     """
-    usr_addr = get_full_address_from_usr_info(client_code) if client_code else None
-    if usr_addr:
-        return usr_addr.strip(), "usr"
+    usr_info = get_full_address_from_usr_info(client_code) if client_code else None
+    if usr_info:
+        # get_full_address_from_usr_info returns (addr, name)
+        if isinstance(usr_info, (list, tuple)) and len(usr_info) > 0:
+            return _as_text(usr_info[0]), "usr"
+        return _as_text(usr_info), "usr"
+        
     if mall_addr:
-        return str(mall_addr).strip(), "mall"
+        return _as_text(mall_addr), "mall"
     return "", "none"
 
 # =========================
@@ -2268,7 +2272,7 @@ def fetch_kapt_maintenance_history(kapt_code: str) -> list[dict]:
         "serviceKey": config.KAPT_SERVICE_KEY,
         "pageNo": "1",
         "numOfRows": "100",
-        "kaptCode": kapt_code.strip(),
+        "kaptCode": _as_text(kapt_code),
         "type": "json"
     }
     try:
@@ -2294,7 +2298,7 @@ def fetch_kapt_detail_info(kapt_code: str) -> Optional[dict]:
     url = api_url(KAPT_DETAIL_INFO_PATH)
     params = {
         "serviceKey": config.KAPT_SERVICE_KEY,
-        "kaptCode": kapt_code.strip(),
+        "kaptCode": _as_text(kapt_code),
         "type": "json"
     }
     try:
