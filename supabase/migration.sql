@@ -40,7 +40,8 @@ CREATE TABLE IF NOT EXISTS public.user_favorites (
   last_action   text,                  -- 마지막 행동 메모
   created_at    timestamp with time zone DEFAULT now(),
   updated_at    timestamp with time zone DEFAULT now(),
-  UNIQUE(user_id, notice_id)
+  UNIQUE(user_id, notice_id),
+  CONSTRAINT user_favorites_notice_id_fkey FOREIGN KEY (notice_id) REFERENCES public.notices (id) ON DELETE CASCADE
 );
 
 ALTER TABLE public.user_favorites ENABLE ROW LEVEL SECURITY;

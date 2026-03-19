@@ -41,6 +41,20 @@ def print_exclude_once(base_notice: dict, client_name: Optional[str], addr_or_ma
 
 EXCLUDE_LOG_MAX = 0 if not LOG_EXCLUDES else 50
 
+def check_env_vars():
+    print("\n[Env Check] 환경변수 상태 확인:")
+    essential = [
+        "SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_DB_URL",
+        "NARA_SERVICE_KEY", "KAPT_SERVICE_KEY", "GEMINI_API_KEY"
+    ]
+    for var in essential:
+        val = os.getenv(var)
+        status = "✅ 설정됨" if val else "❌ 미설정 (경고)"
+        # Masking value for safety
+        masked = (val[:10] + "...") if val and len(val) > 10 else "N/A"
+        print(f"  - {var}: {status} ({masked})")
+    print("-" * 50)
+
 # 파일 상단 유틸
 import os, json, unicodedata
 def _norm(s: str) -> str:
@@ -578,20 +592,20 @@ def _assign_office_by_school_name(client_name: str, project_name: str) -> str | 
     return None
 
 def _as_text(x) -> str:
-    """리스트/숫자/None 등도 안전하게 문자열로 변환."""
+    """리스트/튜플/셋/숫자/None 등도 안전하게 문자열로 변환하고 양끝 공백 제거."""
     if x is None:
         return ""
     if isinstance(x, str):
-        return x
+        return x.strip()
     if isinstance(x, (int, float)):
-        return str(x)
-    if isinstance(x, list):
-        return " ".join(_as_text(v) for v in x)
+        return str(x).strip()
+    if isinstance(x, (list, tuple, set)):
+        return " ".join(_as_text(v) for v in x).strip()
     try:
         # dict 등은 JSON 문자열화 (ensure_ascii=False로 한글 유지)
-        return json.dumps(x, ensure_ascii=False)
+        return json.dumps(x, ensure_ascii=False).strip()
     except Exception:
-        return str(x)
+        return str(x).strip()
     
 
 @lru_cache(maxsize=1)
@@ -1816,8 +1830,8 @@ def _save_dual_office_rows(base_notice: dict, addr: str, offices: List[str]):
 
 import unicodedata
 
-def _is_exact_lh_dgrb(name: Optional[str]) -> bool:
-    t = unicodedata.normalize("NFKC", (name or "").strip())
+def _is_exact_lh_dgrb(name: Optional[Any]) -> bool:
+    t = unicodedata.normalize("NFKC", _as_text(name))
     return t == "한국토지주택공사 대구경북지역본부"
 
 def expand_and_store_with_priority(
@@ -1880,7 +1894,7 @@ def expand_and_store_with_priority(
     #  - 학교는 보지 않음
     #  - 우선순위: (1) 사업명 → (2) 기관명 → (3) 주소(마지막)
     if _is_exact_lh_dgrb(client_name):
-        project_title = (base_notice.get("project_name") or "").strip()
+        project_title = _as_text(base_notice.get("project_name"))
 
         # (1) 사업명(제목) 우선
         if project_title:
@@ -3214,8 +3228,10 @@ def fetch_and_process_order_plans(search_ymd: str):
 
 # --- 입찰공고 ---
 def fetch_and_process_bid_notices(search_ymd: str):
-    print(f"\n--- [{to_ymd(search_ymd)}] 입찰공고(나라장터)) 수집 ---")
+    print(f"\n--- [{to_ymd(search_ymd)}] 입찰공고(나라장터) 수집 ---")
     page, page_size, total_pages = 1, 100, 1
+    buffer = []
+    
     while page <= total_pages:
         params = {
             "ServiceKey": config.NARA_SERVICE_KEY, "type": "json",
@@ -3225,11 +3241,9 @@ def fetch_and_process_bid_notices(search_ymd: str):
         try:
             data = http_get_json(api_url(BID_LIST_PATH), params)
             if not isinstance(data, dict):
-                print("  - 응답 없음(네트워크/서버 응답 오류). 재시도 또는 다음 페이지로 진행")
+                print("  - 응답 없음(네트워크/서버 응답 오류).")
                 page += 1
-                time.sleep(0.35)
                 continue            
-            
             
             body = _as_dict(data.get("response", {}).get("body"))
             if page == 1:
@@ -3238,28 +3252,27 @@ def fetch_and_process_bid_notices(search_ymd: str):
                     print("  - 데이터 없음")
                     break
                 total_pages = (total + page_size - 1) // page_size
-                #print(f"  - 총 {total}건 / {total_pages}p")
                 print(f"  - 총 {total}건")
 
             items = _as_items_list(body)
             if not items:
                 page += 1
-                time.sleep(0.35)
                 continue
 
             for it in items:
-                if it.get("bsnsDivNm") and it.get("bsnsDivNm") != "물품":
+                if it.get("bsnsDivNm") and _as_text(it.get("bsnsDivNm")) != "물품":
                     continue
-                title = it.get("bidNtceNm", "") or it.get("bidNm", "")
+                
+                title = _as_text(it.get("bidNtceNm") or it.get("bidNm") or "")
+                client_name = _as_text(it.get("dmndInsttNm") or it.get("dminsttNm") or "기관명 없음")
+                
                 if not is_relevant_text(title,
                                         _as_text(it.get("bsnsDivNm")),
                                         _as_text(it.get("itemNm") or it.get("prdctNm")),
-                                        _as_text(it.get("dminsttNm") or it.get("dmndInsttNm"))):
+                                        client_name):
                     continue
 
-
                 client_code = it.get("dmndInsttCd") or it.get("dminsttCd")
-                client_name = it.get("dmndInsttNm") or it.get("dminsttNm") or "기관명 없음"
                 mall_addr = guess_mall_addr(it)
 
                 # 상세 URL
@@ -3267,7 +3280,6 @@ def fetch_and_process_bid_notices(search_ymd: str):
                 if not detail_link:
                     bid_no = it.get('bidNtceNo') or ''
                     if bid_no:
-                        # 신규 나라장터 입찰공고 상세 URL
                         detail_link = f"https://www.g2b.go.kr:8101/ep/tbid/tbBidNtceDtlView.do?bidNtceNo={bid_no}&bidNtceOrd=01"
 
                 base = _build_base_notice(
@@ -3275,13 +3287,22 @@ def fetch_and_process_bid_notices(search_ymd: str):
                     "공고 확인 필요", 0, it.get("asignBdgtAmt") or "", "확인필요",
                     to_ymd(it.get("bidNtceDate") or it.get("ntceDt")), detail_link or "", raw=it
                 )
-                expand_and_store_with_priority(base, client_code, mall_addr, client_name)
+                
+                n = expand_and_store_with_priority(base, client_code, mall_addr, client_name, save=False)
+                if n:
+                    buffer.append(n)
 
             page += 1
-            time.sleep(0.35)
+            time.sleep(0.3)
         except Exception as e:
-            session.rollback()
             print(f"  [Error] 입찰공고 처리 오류: {e}")
+            page += 1
+
+    if buffer:
+        bulk_upsert_notices(buffer)
+        _print_bulk_saved(len(buffer))
+    else:
+        print("  - 관심 항목 없음")
 
 # --- 민간입찰(누리장터) ---
 def fetch_and_process_nuri_bids(search_ymd: str):
@@ -4105,28 +4126,14 @@ def resolve_address_from_bjd(addr_text, bjd_code) -> str:
     - 없으면 bjd_code로 bjd_mapper.get_bjd_name_str 또는 get_bjd_name 호출.
     - 항상 '문자열'을 반환(없으면 빈 문자열).
     """
-    # -- 안전 문자열화
-    def _as_text(x) -> str:
-        if x is None:
-            return ""
-        if isinstance(x, str):
-            return x
-        if isinstance(x, (int, float)):
-            return str(x)
-        if isinstance(x, list):
-            return " ".join(_as_text(v) for v in x)
-        try:
-            return json.dumps(x, ensure_ascii=False)
-        except Exception:
-            return str(x)
 
     # 1) addr_text 우선
-    addr = _as_text(addr_text).strip()
+    addr = _as_text(addr_text)
 
     # 2) 비었으면 bjd_code로 보강
     if not addr:
         # bjd_code를 문자열화
-        code = _as_text(bjd_code).strip()
+        code = _as_text(bjd_code)
         name = ""
         if code:
             # bjd_mapper.get_bjd_name_str 우선 사용

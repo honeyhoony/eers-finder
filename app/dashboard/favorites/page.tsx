@@ -63,7 +63,13 @@ export default function FavoritesPage() {
         `)
         .eq("user_id", user.id)
         .order("updated_at", { ascending: false });
-      if (data) setItems(data as unknown as FavoriteItem[]);
+      if (data) {
+        const cleaned = (data as any[]).map(item => {
+          const n = Array.isArray(item.notice) ? item.notice[0] : item.notice;
+          return { ...item, notice: n };
+        }).filter(item => item.notice);
+        setItems(cleaned as unknown as FavoriteItem[]);
+      }
       setLoading(false);
     };
     load();

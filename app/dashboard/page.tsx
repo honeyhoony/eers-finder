@@ -417,33 +417,33 @@ export default function Dashboard() {
       ) : (
         <div className="glass-panel" style={{ marginBottom: "2.5rem", padding: "2rem", background: "white", borderRadius: "24px", border: "1px solid #e2e8f0", boxShadow: "0 10px 40px -10px rgba(0,0,0,0.05)" }}>
         {/* 지역본부 선택 */}
-        <div style={{ marginBottom: "1.25rem" }}>
-          <div style={{ fontSize: "0.85rem", fontWeight: "800", color: "#64748b", marginBottom: "0.5rem", display: "flex", alignItems: "center", gap: "0.4rem" }}><MapPin size={16} /> 지역본부 선택</div>
-          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+        <div style={{ marginBottom: "1.5rem" }}>
+          <div style={{ fontSize: "1.1rem", fontWeight: "900", color: "#1e293b", marginBottom: "0.75rem", display: "flex", alignItems: "center", gap: "0.5rem" }}><MapPin size={20} /> 지역본부 선택</div>
+          <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap" }}>
             {Object.keys(HQ_OFFICE_MAP).map(hq => (
               <button key={hq} onClick={() => { setSelectedHq(hq); setSelectedOffice("전체"); }} style={{ 
-                padding: "0.4rem 0.9rem", borderRadius: "10px", fontSize: "0.85rem", fontWeight: "700", transition: "0.2s",
+                padding: "0.6rem 1.25rem", borderRadius: "10px", fontSize: "1rem", fontWeight: "800", transition: "0.2s",
                 background: selectedHq === hq ? "#10b981" : "#f1f5f9", color: selectedHq === hq ? "white" : "#475569",
-                border: "1px solid #e2e8f0"
+                border: "2px solid", borderColor: selectedHq === hq ? "#059669" : "#e2e8f0", cursor: "pointer"
               }}>{hq}</button>
             ))}
           </div>
         </div>
 
         {/* 시스템 및 공고 단계 */}
-        <div style={{ marginBottom: "1.25rem", borderTop: "1px solid #f1f5f9", paddingTop: "1.25rem" }}>
-          <div style={{ fontSize: "0.85rem", fontWeight: "800", color: "#64748b", marginBottom: "0.6rem", display: "flex", alignItems: "center", gap: "0.4rem" }}>
-            <Globe size={16} /> 공고 분류 및 단계
+        <div style={{ marginBottom: "1.5rem", borderTop: "2px solid #f1f5f9", paddingTop: "1.5rem" }}>
+          <div style={{ fontSize: "1.1rem", fontWeight: "900", color: "#1e293b", marginBottom: "1rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <Globe size={20} /> 공고 분류 및 단계
           </div>
-          <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap", alignItems: "center" }}>
+          <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "center" }}>
             {["전체", "나라장터", "K-APT", "누리장터"].map(sys => (
               <button key={sys} onClick={() => { setSelectedSys(sys); setSelectedStageName("전체"); }} style={{ 
-                padding: "0.5rem 1.2rem", borderRadius: "12px", fontSize: "0.85rem", fontWeight: "800", transition: "all 0.2s",
+                padding: "0.75rem 1.75rem", borderRadius: "14px", fontSize: "1.05rem", fontWeight: "900", transition: "all 0.2s",
                 background: selectedSys === sys ? (sys === "나라장터" ? "#3b82f6" : sys === "K-APT" ? "#10b981" : sys === "누리장터" ? "#8b5cf6" : "#475569") : "#f1f5f9",
                 color: selectedSys === sys ? "white" : "#475569", 
                 border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: "0.5rem",
-                boxShadow: selectedSys === sys ? "0 4px 12px rgba(0,0,0,0.1)" : "none",
-                transform: selectedSys === sys ? "scale(1.02)" : "scale(1)"
+                boxShadow: selectedSys === sys ? "0 4px 15px rgba(0,0,0,0.15)" : "none",
+                transform: selectedSys === sys ? "scale(1.03)" : "scale(1)"
               }}>
                 {sys}
               </button>
@@ -454,16 +454,16 @@ export default function Dashboard() {
             {selectedSys !== "전체" && (
               <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
                 style={{ marginTop: "1rem" }}>
-                <div style={{ padding: "1rem", background: "#f8fafc", borderRadius: "14px", border: "1px solid #e2e8f0", display: "flex", gap: "0.6rem", flexWrap: "wrap", alignItems: "center" }}>
-                  <span style={{ fontSize: "0.8rem", color: "#64748b", fontWeight: "800", background: "#fff", padding: "0.2rem 0.6rem", borderRadius: "6px", border: "1px solid #e2e8f0" }}>단계 필터</span>
+                <div style={{ padding: "1.25rem", background: "#f8fafc", borderRadius: "16px", border: "2px solid #e2e8f0", display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "center" }}>
+                  <span style={{ fontSize: "0.95rem", color: "#1e293b", fontWeight: "900", background: "#fff", padding: "0.4rem 0.8rem", borderRadius: "8px", border: "2px solid #e2e8f0" }}>단계 필터</span>
                   {(selectedSys === "나라장터" ? ["전체", "발주계획", "입찰공고", "계약완료", "납품요구"] :
                     selectedSys === "누리장터" ? ["전체", "입찰공고", "계약완료"] :
                     ["전체", "입찰공고", "계약완료", "개찰결과", "일반공고(수의)"]).map(stage => (
                     <button key={stage} onClick={() => setSelectedStageName(stage)} style={{
-                      padding: "0.4rem 0.8rem", borderRadius: "8px", fontSize: "0.8rem", fontWeight: "700", transition: "0.2s",
+                      padding: "0.6rem 1.1rem", borderRadius: "10px", fontSize: "1rem", fontWeight: "800", transition: "0.2s",
                       background: selectedStageName === stage ? "#1e293b" : "white",
                       color: selectedStageName === stage ? "white" : "#64748b",
-                      border: "1px solid", borderColor: selectedStageName === stage ? "#1e293b" : "#e2e8f0", cursor: "pointer"
+                      border: "2px solid", borderColor: selectedStageName === stage ? "#1e293b" : "#e2e8f0", cursor: "pointer"
                     }}>
                       {stage}
                     </button>
@@ -476,23 +476,23 @@ export default function Dashboard() {
 
         {/* 사업소 선택 (본부 선택 시 노출) */}
         {selectedHq !== "전국" && (
-          <div style={{ marginBottom: "1.25rem", padding: "1.5rem", background: "rgba(59, 130, 246, 0.03)", borderRadius: "20px", border: "1px solid rgba(59, 130, 246, 0.15)" }}>
-            <div style={{ fontSize: "0.85rem", fontWeight: "800", color: "#3b82f6", marginBottom: "1rem", display: "flex", alignItems: "center", gap: "0.4rem" }}>
-              <Building2 size={16} /> {selectedHq} 소속 사업소
+          <div style={{ marginBottom: "1.5rem", padding: "1.75rem", background: "rgba(59, 130, 246, 0.05)", borderRadius: "24px", border: "2px solid rgba(59, 130, 246, 0.2)" }}>
+            <div style={{ fontSize: "1.1rem", fontWeight: "900", color: "#2563eb", marginBottom: "1.25rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+              <Building2 size={20} /> {selectedHq} 소속 사업소 ({HQ_OFFICE_MAP[selectedHq]?.length || 0}곳)
             </div>
-            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+            <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap" }}>
               <button onClick={() => setSelectedOffice("전체")} style={{ 
-                padding: "0.5rem 1.1rem", borderRadius: "10px", fontSize: "0.85rem", fontWeight: "700",
+                padding: "0.6rem 1.25rem", borderRadius: "12px", fontSize: "0.95rem", fontWeight: "800", cursor: "pointer",
                 background: selectedOffice === "전체" ? "#3b82f6" : "#fff", color: selectedOffice === "전체" ? "white" : "#64748b",
-                border: "1px solid", borderColor: selectedOffice === "전체" ? "#3b82f6" : "#e2e8f0",
-                boxShadow: "0 2px 4px rgba(0,0,0,0.02)"
+                border: "2px solid", borderColor: selectedOffice === "전체" ? "#2563eb" : "#e2e8f0",
+                boxShadow: "0 3px 6px rgba(0,0,0,0.03)"
               }}>전체</button>
               {HQ_OFFICE_MAP[selectedHq].map(off => (
                 <button key={off} onClick={() => setSelectedOffice(off)} style={{ 
-                  padding: "0.5rem 1.1rem", borderRadius: "10px", fontSize: "0.85rem", fontWeight: "700",
+                  padding: "0.6rem 1.25rem", borderRadius: "12px", fontSize: "0.95rem", fontWeight: "800", cursor: "pointer",
                   background: selectedOffice === off ? "#3b82f6" : "#fff", color: selectedOffice === off ? "white" : "#64748b",
-                  border: "1px solid", borderColor: selectedOffice === off ? "#3b82f6" : "#e2e8f0",
-                  boxShadow: "0 2px 4px rgba(0,0,0,0.02)"
+                  border: "2px solid", borderColor: selectedOffice === off ? "#2563eb" : "#e2e8f0",
+                  boxShadow: "0 3px 6px rgba(0,0,0,0.03)"
                 }}>{off}</button>
               ))}
             </div>
@@ -500,45 +500,44 @@ export default function Dashboard() {
         )}
 
         {/* 조회 기간 */}
-        <div style={{ marginBottom: "1.25rem", borderTop: "1px solid #f1f5f9", paddingTop: "1.25rem" }}>
-          <div style={{ fontSize: "0.85rem", fontWeight: "800", color: "#64748b", marginBottom: "0.5rem", display: "flex", alignItems: "center", gap: "0.4rem" }}><Calendar size={16} /> 조회 기간 설정</div>
-          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
+        <div style={{ marginBottom: "1.5rem", borderTop: "2px solid #f1f5f9", paddingTop: "1.5rem" }}>
+          <div style={{ fontSize: "1.1rem", fontWeight: "900", color: "#1e293b", marginBottom: "0.75rem", display: "flex", alignItems: "center", gap: "0.5rem" }}><Calendar size={20} /> 조회 기간 설정</div>
+          <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "center" }}>
             {["오늘", "1주", "1개월", "이번달", "전체", "직접선택"].map((p) => (
               <button key={p} onClick={() => p === "직접선택" ? setDatePreset("직접선택") : applyPreset(p as DatePreset)} style={{ 
-                padding: "0.4rem 0.9rem", borderRadius: "10px", fontSize: "0.8rem", fontWeight: "700",
+                padding: "0.6rem 1.1rem", borderRadius: "12px", fontSize: "1rem", fontWeight: "800", cursor: "pointer",
                 background: datePreset === p ? "#1e293b" : "#f1f5f9", color: datePreset === p ? "white" : "#475569",
-                border: "1px solid #e2e8f0"
+                border: "2px solid #e2e8f0"
               }}>{p}</button>
             ))}
-            {/* 날짜 입력창 항상 표시 (그대로 띄우기) */}
-            <div style={{ display: "flex", alignItems: "center", gap: "0.3rem", marginLeft: "0.5rem" }}>
-              <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} style={{ padding: "0.3rem 0.6rem", borderRadius: "8px", border: "1px solid #e2e8f0", fontSize: "0.8rem" }} />
-              <span style={{ color: "#94a3b8" }}>~</span>
-              <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} style={{ padding: "0.3rem 0.6rem", borderRadius: "8px", border: "1px solid #e2e8f0", fontSize: "0.8rem" }} />
+            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginLeft: "1rem" }}>
+              <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} style={{ padding: "0.6rem 1rem", borderRadius: "12px", border: "2px solid #e2e8f0", fontSize: "1.05rem", fontWeight: "600" }} />
+              <span style={{ color: "#94a3b8", fontWeight: "900" }}>~</span>
+              <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} style={{ padding: "0.6rem 1rem", borderRadius: "12px", border: "2px solid #e2e8f0", fontSize: "1.05rem", fontWeight: "600" }} />
             </div>
           </div>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: "1rem", flexWrap: "wrap", borderTop: "1px solid #f1f5f9", paddingTop: "1.25rem", marginBottom: "1.25rem" }}>
-          <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.85rem", fontWeight: "800", color: "#059669", cursor: "pointer" }}>
-            <input type="checkbox" checked={showCertifiedOnly} onChange={e => setShowCertifiedOnly(e.target.checked)} style={{ width: "16px", height: "16px" }} />
+        <div style={{ display: "flex", alignItems: "center", gap: "1.5rem", flexWrap: "wrap", borderTop: "2px solid #f1f5f9", paddingTop: "1.5rem", marginBottom: "1.5rem" }}>
+          <label style={{ display: "flex", alignItems: "center", gap: "0.75rem", fontSize: "1.05rem", fontWeight: "900", color: "#059669", cursor: "pointer" }}>
+            <input type="checkbox" checked={showCertifiedOnly} onChange={e => setShowCertifiedOnly(e.target.checked)} style={{ width: "22px", height: "22px" }} />
             고효율 기기(LED) 인증만 보기
           </label>
-          <span style={{ fontSize: "0.75rem", color: "#64748b" }}>
+          <span style={{ fontSize: "0.9rem", color: "#1e293b", fontWeight: "700", background: "#f1f5f9", padding: "0.40rem 1rem", borderRadius: "8px" }}>
             ℹ️ 인증 여부는 종합쇼핑몰(나라장터-납품요구) 건만 확인 가능하며, 대게 LED 품목 중심입니다.
           </span>
         </div>
 
         {/* 간편 검색 (키워드) */}
-        <div style={{ borderTop: "1px solid #f1f5f9", paddingTop: "1.25rem" }}>
-          <div style={{ fontSize: "0.85rem", fontWeight: "800", color: "#64748b", marginBottom: "0.75rem", display: "flex", alignItems: "center", gap: "0.4rem" }}><Search size={16} /> 간편검색</div>
-          <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
+        <div style={{ borderTop: "2px solid #f1f5f9", paddingTop: "1.5rem" }}>
+          <div style={{ fontSize: "1.1rem", fontWeight: "900", color: "#1e293b", marginBottom: "1rem", display: "flex", alignItems: "center", gap: "0.5rem" }}><Search size={20} /> 간편검색 키워드</div>
+          <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap" }}>
             {QUICK_KEYWORDS.map(kw => (
               <button key={kw} onClick={() => setSearchText(searchText === kw ? "" : kw)} style={{ 
-                padding: "0.35rem 0.85rem", borderRadius: "8px", fontSize: "0.8rem", fontWeight: "700",
+                padding: "0.6rem 1.25rem", borderRadius: "10px", fontSize: "1rem", fontWeight: "800", cursor: "pointer",
                 background: searchText === kw ? "#3b82f6" : "#fff", color: searchText === kw ? "white" : "#64748b",
-                border: searchText === kw ? "1px solid #3b82f6" : "1px solid #e2e8f0",
-                boxShadow: "0 1px 2px rgba(0,0,0,0.05)"
+                border: searchText === kw ? "2px solid #2563eb" : "2px solid #e2e8f0",
+                boxShadow: "0 2px 5px rgba(0,0,0,0.08)"
               }}>{kw}</button>
             ))}
           </div>
@@ -547,9 +546,9 @@ export default function Dashboard() {
       )}
 
       <div style={{ position: "relative", marginBottom: "1.5rem" }}>
-        <Search size={20} style={{ position: "absolute", left: isMobile ? "0.8rem" : "1.2rem", top: "50%", transform: "translateY(-50%)", color: "#94a3b8" }} />
+        <Search size={22} style={{ position: "absolute", left: isMobile ? "1rem" : "1.5rem", top: "50%", transform: "translateY(-50%)", color: "#94a3b8" }} />
         <input value={searchText} onChange={e => setSearchText(e.target.value)} placeholder="( 예 : LED & 리모델링 )" 
-          style={{ width: "100%", padding: isMobile ? "0.75rem 0.75rem 0.75rem 2.5rem" : "1rem 1rem 1rem 3.5rem", borderRadius: isMobile ? "12px" : "16px", border: "1px solid #e2e8f0", fontSize: isMobile ? "0.9rem" : "1.05rem", color: "#000", boxShadow: "0 4px 15px rgba(0,0,0,0.03)" }} />
+          style={{ width: "100%", padding: isMobile ? "1rem 1rem 1rem 3rem" : "1.25rem 1.25rem 1.25rem 4rem", borderRadius: isMobile ? "12px" : "16px", border: "1.5px solid #e2e8f0", fontSize: isMobile ? "1.1rem" : "1.25rem", fontWeight: "600", color: "#000", boxShadow: "0 4px 20px rgba(0,0,0,0.05)" }} />
       </div>
 
       {isMobile ? (
@@ -559,32 +558,61 @@ export default function Dashboard() {
           openEmailModal={openEmailModal}
           setShowPhoneModal={setShowPhoneModal}
           setAnalysisNotice={handleAiAnalysisClick}
+          viewMode={viewMode}
+          setViewMode={setViewMode}
         />
       ) : (
         <>
-          {/* ── 3. 공고 리스트 ── */}
-          <div style={{ marginBottom: "1rem", fontSize: "0.95rem", color: "#000", fontWeight: "800", background: "white", padding: "1rem 1.5rem", borderRadius: "12px", border: "1px solid #e2e8f0" }}>
-            📊 검색 조건에 따른 조회 건수 <span style={{ color: "#3b82f6" }}>{notices.length}건</span> 중 목록에 <span style={{ color: "#10b981" }}>{filteredNotices.length}건</span> 표시
+          {/* ── 3. 공고 리스트 헤더 & 뷰 토글 ── */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem" }}>
+            <div style={{ fontSize: "1.15rem", color: "#0f172a", fontWeight: "900", background: "white", padding: "0.75rem 1.5rem", borderRadius: "12px", border: "1.5px solid #1e293b", boxShadow: "0 2px 8px rgba(0,0,0,0.03)" }}>
+              📊 검색 결과 합계: <span style={{ color: "#3b82f6" }}>{filteredNotices.length}건</span>
+            </div>
+            
+            <div style={{ display: "flex", background: "white", padding: "4px", borderRadius: "12px", border: "1.5px solid #e2e8f0" }}>
+              <button 
+                onClick={() => { setViewMode("list"); localStorage.setItem("dashboardViewMode", "list"); }}
+                style={{ 
+                  padding: "0.6rem 1.25rem", borderRadius: "8px", border: "none", transition: "0.2s",
+                  background: viewMode === "list" ? "#1e293b" : "transparent",
+                  color: viewMode === "list" ? "white" : "#64748b",
+                  display: "flex", alignItems: "center", gap: "0.5rem", fontWeight: "800", fontSize: "0.95rem"
+                }}
+              >
+                <Filter size={18} /> 목록형으로 보기
+              </button>
+              <button 
+                onClick={() => { setViewMode("card"); localStorage.setItem("dashboard_CardMode", "card"); }}
+                style={{ 
+                  padding: "0.6rem 1.25rem", borderRadius: "8px", border: "none", transition: "0.2s",
+                  background: viewMode === "card" ? "#1e293b" : "transparent",
+                  color: viewMode === "card" ? "white" : "#64748b",
+                  display: "flex", alignItems: "center", gap: "0.5rem", fontWeight: "800", fontSize: "0.95rem"
+                }}
+              >
+                <BarChart size={18} /> 카드형으로 보기
+              </button>
+            </div>
           </div>
           
           {viewMode === "list" ? (
-        <div style={{ overflowX: "auto", background: "white", borderRadius: "12px", border: "1px solid #e2e8f0" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem", minWidth: "1200px" }}>
-            <thead style={{ background: "#f8fafc", borderBottom: "2px solid #e2e8f0" }}>
-              <tr>
-                <th style={{ width: "40px", padding: "0.75rem", textAlign: "center", color: "#475569", fontWeight: "800" }}>관심</th>
-                <th style={{ width: "65px", padding: "0.75rem", textAlign: "center", color: "#475569", fontWeight: "800" }}>출처</th>
-                <th style={{ width: "60px", padding: "0.75rem", textAlign: "center", color: "#475569", fontWeight: "800" }}>지사/지역</th>
-                <th style={{ width: "65px", padding: "0.75rem", textAlign: "center", color: "#475569", fontWeight: "800" }}>단계</th>
-                <th style={{ minWidth: "600px", padding: "0.75rem", textAlign: "left", color: "#475569", fontWeight: "800" }}>공고명</th>
-                <th style={{ width: "130px", padding: "0.75rem", textAlign: "left", color: "#475569", fontWeight: "800" }}>수요기관</th>
-                <th style={{ width: "110px", padding: "0.75rem", textAlign: "center", color: "#475569", fontWeight: "800" }}>연락처</th>
-                <th style={{ width: "140px", padding: "0.75rem", textAlign: "center", color: "#475569", fontWeight: "800" }}>모델명</th>
-                <th style={{ width: "50px", padding: "0.75rem", textAlign: "center", color: "#475569", fontWeight: "800" }}>수량</th>
-                <th style={{ width: "70px", padding: "0.75rem", textAlign: "center", color: "#475569", fontWeight: "800" }}>인증여부</th>
-                <th style={{ width: "85px", padding: "0.75rem", textAlign: "center", color: "#475569", fontWeight: "800" }}>게시일</th>
-                <th style={{ width: "75px", padding: "0.75rem", textAlign: "center", color: "#475569", fontWeight: "800" }}>AI점수</th>
-                <th style={{ width: "70px", padding: "0.75rem", textAlign: "center", color: "#475569", fontWeight: "800" }}>보기</th>
+        <div style={{ overflowX: "auto", background: "white", borderRadius: "16px", border: "1.5px solid #e2e8f0", boxShadow: "0 10px 30px rgba(0,0,0,0.03)" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "1.15rem", minWidth: "2900px" }}>
+            <thead style={{ background: "#f8fafc", borderBottom: "3px solid #e2e8f0" }}>
+              <tr style={{ height: "80px" }}>
+                <th style={{ width: "140px", padding: "1.5rem 1rem", textAlign: "center", color: "#475569", fontWeight: "900" }}>관심</th>
+                <th style={{ width: "260px", padding: "1.5rem 1rem", textAlign: "center", color: "#475569", fontWeight: "900" }}>출처</th>
+                <th style={{ width: "320px", padding: "1.5rem 1rem", textAlign: "left", color: "#475569", fontWeight: "900" }}>지사/지역</th>
+                <th style={{ width: "350px", padding: "1.5rem 1rem", textAlign: "center", color: "#475569", fontWeight: "900" }}>단계</th>
+                <th style={{ minWidth: "600px", padding: "1.5rem 1rem", textAlign: "left", color: "#475569", fontWeight: "900" }}>공고명</th>
+                <th style={{ width: "300px", padding: "1.5rem 1rem", textAlign: "left", color: "#475569", fontWeight: "900" }}>수요기관</th>
+                <th style={{ width: "220px", padding: "1.5rem 1rem", textAlign: "center", color: "#475569", fontWeight: "900" }}>연락처</th>
+                <th style={{ width: "250px", padding: "1.5rem 1rem", textAlign: "center", color: "#475569", fontWeight: "900" }}>모델명</th>
+                <th style={{ width: "100px", padding: "1.5rem 1rem", textAlign: "center", color: "#475569", fontWeight: "900" }}>수량</th>
+                <th style={{ width: "150px", padding: "1.5rem 1rem", textAlign: "center", color: "#475569", fontWeight: "900" }}>인증여부</th>
+                <th style={{ width: "200px", padding: "1.5rem 1rem", textAlign: "center", color: "#475569", fontWeight: "900" }}>게시일</th>
+                <th style={{ width: "120px", padding: "1.5rem 1rem", textAlign: "center", color: "#475569", fontWeight: "900" }}>AI점수</th>
+                <th style={{ width: "180px", padding: "1.5rem 1rem", textAlign: "center", color: "#475569", fontWeight: "900" }}>보기</th>
               </tr>
             </thead>
             <tbody>
@@ -596,34 +624,34 @@ export default function Dashboard() {
                 
                 return (
                   <tr key={n.id} style={{ borderBottom: "1px solid #f1f5f9", background: i % 2 === 0 ? "white" : "#fafaf9" }}>
-                    <td style={{ padding: "0.75rem", textAlign: "center" }}>
+                    <td style={{ padding: "0.85rem", textAlign: "center" }}>
                       <button onClick={() => toggleFavorite(n)} style={{ background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", width: "100%" }}>
                         <Heart size={16} fill={n.is_favorite ? "#f87171" : "none"} color={n.is_favorite ? "#f87171" : "#94a3b8"} />
                       </button>
                     </td>
-                    <td style={{ padding: "0.75rem", textAlign: "center" }}>
-                      <span style={{ fontSize: "0.7rem", fontWeight: "800", padding: "0.2rem 0.5rem", borderRadius: "4px", background: src.bg, color: src.color }}>{src.label}</span>
+                    <td style={{ padding: "1.5rem 1rem", textAlign: "center" }}>
+                      <span style={{ fontSize: "1rem", fontWeight: "800", padding: "0.4rem 1rem", borderRadius: "6px", background: src.bg, color: src.color }}>{src.label}</span>
                     </td>
-                    <td style={{ padding: "0.75rem", textAlign: "center", color: "#334155", fontWeight: "600" }}>
+                    <td style={{ padding: "1.5rem 1rem", textAlign: "left", color: "#334155", fontWeight: "600", whiteSpace: "nowrap" }}>
                       {n.assigned_hq} {n.assigned_office}
                     </td>
-                    <td style={{ padding: "0.75rem", textAlign: "center" }}>
-                      <span style={{ fontSize: "0.7rem", fontWeight: "800", padding: "0.2rem 0.5rem", borderRadius: "4px", background: stage.bg, color: stage.color }}>{stage.label}</span>
+                    <td style={{ padding: "1.5rem 1rem", textAlign: "center" }}>
+                      <span style={{ fontSize: "1rem", fontWeight: "800", padding: "0.4rem 1rem", borderRadius: "6px", background: stage.bg, color: stage.color }}>{stage.label}</span>
                     </td>
-                    <td style={{ padding: "0.75rem", color: "#000", fontWeight: "700" }}>
+                    <td style={{ padding: "0.85rem", color: "#000", fontWeight: "700" }}>
                       <Link href={`/dashboard/${n.id}`} style={{ textDecoration: "none", color: "inherit" }}>
                         {n.project_name}
                       </Link>
                     </td>
-                    <td style={{ padding: "0.75rem", color: "#475569" }}>{n.client || "-"}</td>
-                    <td style={{ padding: "0.75rem", textAlign: "center", color: "#3b82f6", fontWeight: "600" }}>
+                    <td style={{ padding: "0.85rem", color: "#475569", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{n.client || "-"}</td>
+                    <td style={{ padding: "0.85rem", textAlign: "center", color: "#3b82f6", fontWeight: "600", whiteSpace: "nowrap" }}>
                       {n.phone_number ? <a href={`tel:${n.phone_number}`} style={{ color: "inherit", textDecoration: "none" }}>{n.phone_number}</a> : "-"}
                     </td>
-                    <td style={{ padding: "0.75rem", textAlign: "center", color: "#059669", fontWeight: "700" }}>
+                    <td style={{ padding: "0.85rem", textAlign: "center", color: "#059669", fontWeight: "700", overflow: "hidden", textOverflow: "ellipsis" }}>
                       {n.source_system === "G2B" && n.stage === "납품요구" ? (n.model_name || "-") : "공고 확인 필요"}
                     </td>
-                    <td style={{ padding: "0.75rem", textAlign: "center", color: "#475569" }}>{n.quantity || "-"}</td>
-                    <td style={{ padding: "0.75rem", textAlign: "center", fontWeight: "600", fontSize: "0.75rem" }}>
+                    <td style={{ padding: "0.85rem", textAlign: "center", color: "#475569" }}>{n.quantity || "-"}</td>
+                    <td style={{ padding: "1.5rem 1rem", textAlign: "center", fontWeight: "600", fontSize: "1rem", whiteSpace: "nowrap" }}>
                       {n.source_system === "G2B" && n.stage === "납품요구" ? (
                         n.is_certified?.includes("O(인증)") ? (
                           <span style={{ color: "#10b981" }}>인증</span>
@@ -634,12 +662,12 @@ export default function Dashboard() {
                         <span style={{ color: "#94a3b8" }}>별도확인</span>
                       )}
                     </td>
-                    <td style={{ padding: "0.75rem", textAlign: "center", color: "#64748b" }}>{toDisplay(n.notice_date || "")}</td>
-                    <td style={{ padding: "0.75rem", textAlign: "center" }}>
+                    <td style={{ padding: "1.5rem 1rem", textAlign: "center", color: "#64748b", whiteSpace: "nowrap" }}>{toDisplay(n.notice_date || "")}</td>
+                    <td style={{ padding: "1.5rem 1rem", textAlign: "center" }}>
                       {n.ai_suitability_score !== null && n.ai_suitability_score > 0 ? (
                         <button 
                           onClick={() => handleAiAnalysisClick(n)}
-                          style={{ background: "none", border: "none", fontWeight: "800", color: scoreColor, cursor: "pointer", textDecoration: "underline" }} 
+                          style={{ background: "none", border: "none", fontWeight: "900", color: scoreColor, cursor: "pointer", textDecoration: "underline", fontSize: "1.1rem" }} 
                           title={n.ai_suitability_reason || "적합도 점수"}>
                           {score}
                         </button>
@@ -647,13 +675,13 @@ export default function Dashboard() {
                         <button 
                           onClick={() => handleAiAnalysisClick(n)}
                           className="btn-secondary" 
-                          style={{ padding: "0.25rem 0.5rem", fontSize: "0.7rem", whiteSpace: "nowrap", cursor: "pointer" }}>
+                          style={{ padding: "0.5rem 1rem", fontSize: "1rem", whiteSpace: "nowrap", cursor: "pointer", fontWeight: "800" }}>
                           미분석
                         </button>
                       )}
                     </td>
-                    <td style={{ padding: "0.75rem", textAlign: "center" }}>
-                      <Link href={`/dashboard/${n.id}`} className="btn-primary" style={{ padding: "0.3rem 0.6rem", fontSize: "0.75rem", display: "inline-block", textAlign: "center", textDecoration: "none" }}>보기</Link>
+                    <td style={{ padding: "1.5rem 1rem", textAlign: "center" }}>
+                      <Link href={`/dashboard/${n.id}`} className="btn-primary" style={{ padding: "0.6rem 1.25rem", fontSize: "1rem", display: "inline-block", textAlign: "center", textDecoration: "none", fontWeight: "900" }}>보기</Link>
                     </td>
                   </tr>
                 );

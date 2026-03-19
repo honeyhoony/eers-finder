@@ -105,10 +105,10 @@ export default function ProfilePage() {
       
       if (f) {
         // Flatten the join result to Match FavNotice type
-        const flattened = f.map((item: any) => ({
-          ...item.notice,
-          is_favorite: true
-        }));
+        const flattened = f.map((item: any) => {
+          const n = Array.isArray(item.notice) ? item.notice[0] : item.notice;
+          return n ? { ...n, is_favorite: true } : null;
+        }).filter(Boolean) as FavNotice[];
         setFavs(flattened);
       }
 
@@ -267,31 +267,7 @@ export default function ProfilePage() {
             </div>
           </div>
 
-          {/* View Mode 설정 */}
-          <div style={{ padding: "1rem", borderRadius: "10px", background: "rgba(255,255,255,0.03)", border: "1px solid var(--surface-border)", marginBottom: "1.5rem" }}>
-            <div style={{ marginBottom: "0.8rem" }}>
-              <span style={{ fontSize: "0.9rem", fontWeight: "600", display: "flex", alignItems: "center", gap: "0.5rem" }}><LayoutGrid size={16} color="var(--brand-primary)" /> 대시보드 뷰 모드 설정</span>
-              <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", margin: "0.3rem 0 0 0" }}>
-                메인 대시보드에서 공고를 볼 때 카드 형태 또는 목록 형태로 표시합니다.
-              </p>
-            </div>
-            <div style={{ display: "flex", gap: "0.5rem" }}>
-              <button onClick={() => { setViewMode("card"); localStorage.setItem("dashboardViewMode", "card"); }}
-                style={{ flex: 1, padding: "0.6rem", borderRadius: "8px", fontSize: "0.85rem", fontWeight: "700", display: "flex", alignItems: "center", justifyContent: "center", gap: "0.4rem",
-                  background: viewMode === "card" ? "rgba(16,185,129,0.15)" : "rgba(255,255,255,0.05)",
-                  border: viewMode === "card" ? "1px solid rgba(16,185,129,0.4)" : "1px solid var(--surface-border)",
-                  color: viewMode === "card" ? "var(--brand-primary)" : "var(--text-secondary)", cursor: "pointer" }}>
-                <LayoutGrid size={16} /> 카드형
-              </button>
-              <button onClick={() => { setViewMode("list"); localStorage.setItem("dashboardViewMode", "list"); }}
-                style={{ flex: 1, padding: "0.6rem", borderRadius: "8px", fontSize: "0.85rem", fontWeight: "700", display: "flex", alignItems: "center", justifyContent: "center", gap: "0.4rem",
-                  background: viewMode === "list" ? "rgba(16,185,129,0.15)" : "rgba(255,255,255,0.05)",
-                  border: viewMode === "list" ? "1px solid rgba(16,185,129,0.4)" : "1px solid var(--surface-border)",
-                  color: viewMode === "list" ? "var(--brand-primary)" : "var(--text-secondary)", cursor: "pointer" }}>
-                <List size={16} /> 목록형
-              </button>
-            </div>
-          </div>
+          {/* (View Mode setting removed - now on dashboard) */}
 
           {profile?.is_admin && (
             <div style={{ padding: "0.5rem 0.8rem", borderRadius: "8px", background: "rgba(139,92,246,0.1)", border: "1px solid rgba(139,92,246,0.3)", marginBottom: "1rem", fontSize: "0.85rem", color: "#c4b5fd" }}>
